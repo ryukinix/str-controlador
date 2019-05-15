@@ -15,9 +15,49 @@
 
 #define FALHA 1
 
+// ------------------------------------------
 
-int cria_socket_local(void)
-{
+// Vetor de sensores
+float VS[5];
+// Vetor de atuadors
+float VA[4];
+
+// Alias do socket
+typedef int socket_udp;
+
+// Thread 1
+void ler_sensores(float *vs,socket_udp s,struct sockaddr_in endereco_destino);
+// Thread 2
+void ler_atuadores(float *va,socket_udp s,struct sockaddr_in endereco_destino);
+// Thread 3
+void imprimir_valores(float *vs,float *va);
+
+// ------------------------------------------
+
+float extrair_num (char *s,int k){
+    int n = strlen(s);
+    char sub_s[1000];
+
+    for (int i = k; i < n; i++) {
+        sub_s[i-k] = s[i];
+    }
+
+    float x = atof(sub_s);
+    return x;
+}
+
+void imprimir_valores(float *vs, float *va) {
+    printf("== SENSORES\n");
+    printf("Ta: \t%.2f\n ", vs[0]);
+    printf("T: \t%.2f\n ", vs[1]);
+    printf("Ti: \t%.2f\n ", vs[2]);
+    printf("No: \t%.2f\n ", vs[3]);
+    printf("H: \t%.2f\n ", vs[4]);
+
+    printf("== ATUADORES");
+}
+
+int cria_socket_local(void) {
 	int socket_local;		/* Socket usado na comunicacao */
 
 	socket_local = socket( PF_INET, SOCK_DGRAM, 0);
@@ -28,11 +68,10 @@ int cria_socket_local(void)
 	return socket_local;
 }
 
-struct sockaddr_in cria_endereco_destino(char *destino, int porta_destino)
-{
+struct sockaddr_in cria_endereco_destino(char *destino, int porta_destino) {
 	struct sockaddr_in servidor;	/* Endereco do servidor incluindo ip e porta */
-	struct hostent *dest_internet;	/* Endereco destino em formato proprio */
-	struct in_addr dest_ip;			/* Endereco destino em formato ip numerico */
+	struct hostent *dest_internet;	/* Endereco destino em formato proprio       */
+	struct in_addr dest_ip;			/* Endereco destino em formato ip numerico   */
 
 	if (inet_aton ( destino, &dest_ip ))
 		dest_internet = gethostbyaddr((char *)&dest_ip, sizeof(dest_ip), AF_INET);
@@ -53,8 +92,7 @@ struct sockaddr_in cria_endereco_destino(char *destino, int porta_destino)
 }
 
 
-void envia_mensagem(int socket_local, struct sockaddr_in endereco_destino, char *mensagem)
-{
+void envia_mensagem(int socket_local, struct sockaddr_in endereco_destino, char *mensagem) {
 	/* Envia msg ao servidor */
 
 	if (sendto(socket_local, mensagem, strlen(mensagem)+1, 0, (struct sockaddr *) &endereco_destino, sizeof(endereco_destino)) < 0 )
@@ -65,9 +103,8 @@ void envia_mensagem(int socket_local, struct sockaddr_in endereco_destino, char 
 }
 
 
-int recebe_mensagem(int socket_local, char *buffer, int TAM_BUFFER)
-{
-	int bytes_recebidos;		/* Numero de bytes recebidos */
+int recebe_mensagem(int socket_local, char *buffer, int TAM_BUFFER) {
+	int bytes_recebidos;   /* Numero de bytes recebidos */
 
 	/* Espera pela msg de resposta do servidor */
 	bytes_recebidos = recvfrom(socket_local, buffer, TAM_BUFFER, 0, NULL, 0);
@@ -79,8 +116,32 @@ int recebe_mensagem(int socket_local, char *buffer, int TAM_BUFFER)
 	return bytes_recebidos;
 }
 
-int main(int argc, char *argv[])
-{
+float ler_sensor(socket_udp s, struct sockaddr_in endereco_destino, char* requisicao) {
+    char msg_recebida[1000];
+    int nrec;
+
+
+    envia_mensagem(s,endereco_destino, requisicao);
+    nrec = recebe_mensagem(s,msg_recebida,1000);
+    msg_recebida[nrec] = '\0';
+    return extrair_num(msg_recebida,3);
+}
+
+void ler_sensores(float *vs,socket_udp s,struct sockaddr_in endereco_destino){
+    float ta = ler_sensor(s, endereco_destino, "sta0");
+    float t = ler_sensor(s, endereco_destino, "st-0");
+    float ti = ler_sensor(s, endereco_destino, "sti0");
+    float no = ler_sensor(s, endereco_destino, "sto0");
+    float h = ler_sensor(s, endereco_destino, "sh-0");
+    vs[0] = ta;
+    vs[1] = t;
+    vs[2] = ti;
+    vs[3] = no;
+    vs[4] = h;
+}
+
+
+int main(int argc, char *argv[]) {
 	if (argc < 3) {
 		fprintf(stderr,"Uso: controlemanual <endereco> <porta>\n");
 		fprintf(stderr,"<endereco> eh o endereco IP da caldeira\n");
@@ -96,65 +157,68 @@ int main(int argc, char *argv[])
 
 	struct sockaddr_in endereco_destino = cria_endereco_destino(argv[1], porta_destino);
 
+    ler_sensores(VS, socket_local, endereco_destino);
+    imprimir_valores(VS, VA);
 
-	char opcao;
-	do{
-		char teclado[1000];
-		double valor;
-		char msg_enviada[1000];
-		char msg_recebida[1000];
-		int nrec;
+	/* char opcao; */
+	/* do { */
+	/* 	char teclado[1000]; */
+	/* 	double valor; */
+	/* 	char msg_enviada[1000]; */
+	/* 	char msg_recebida[1000]; */
+	/* 	int nrec; */
 
-		printf("\n");   //\\Digite a letra da opcao seguida pelo valor, no caso de atuadores:);
-		printf("<x> Termina o programa\n");
-		printf("<a> Lê valor de Ta\n");
-		printf("<t> Lê valor de T\n");
-		printf("<i> Lê valor de Ti\n");
-		printf("<o> Lê valor de No\n");
-		printf("<h> Lê valor de H\n");
-		printf("<I><valor> Define valor de Ni\n");
-		printf("<Q><valor> Define valor de Q\n");
-		printf("<A><valor> Define valor de Na\n");
-		printf("<F><valor> Define valor de Nf\n");
-		printf("Digite a letra da opcao seguida pelo valor, no caso de atuadores:\n");
+	/* 	printf("\n");   //\\Digite a letra da opcao seguida pelo valor, no caso de atuadores:); */
+	/* 	printf("<x> Termina o programa\n"); */
+	/* 	printf("<a> Lê valor de Ta\n"); */
+	/* 	printf("<t> Lê valor de T\n"); */
+	/* 	printf("<i> Lê valor de Ti\n"); */
+	/* 	printf("<o> Lê valor de No\n"); */
+	/* 	printf("<h> Lê valor de H\n"); */
+	/* 	printf("<I><valor> Define valor de Ni\n"); */
+	/* 	printf("<Q><valor> Define valor de Q\n"); */
+	/* 	printf("<A><valor> Define valor de Na\n"); */
+	/* 	printf("<F><valor> Define valor de Nf\n"); */
+	/* 	printf("Digite a letra da opcao seguida pelo valor, no caso de atuadores:\n"); */
 
-		fgets( teclado, 1000, stdin);
-		opcao = teclado[0];
-		switch( opcao ) {
-        case 'x':	exit(0);
-        case 'a':	strcpy( msg_enviada, "sta0");
-            break;
-        case 't':	strcpy( msg_enviada, "st-0");
-            break;
-        case 'i':	strcpy( msg_enviada, "sti0");
-            break;
-        case 'o':	strcpy( msg_enviada, "sno0");
-            break;
-        case 'h':	strcpy( msg_enviada, "sh-0");
-            break;
-        case 'I':	valor = atof( &teclado[1] );
-            sprintf( msg_enviada, "ani%lf", valor);
-            break;
-        case 'Q':	valor = atof( &teclado[1] );
-            sprintf( msg_enviada, "aq-%lf", valor);
-            break;
-        case 'A':	valor = atof( &teclado[1] );
-            sprintf( msg_enviada, "ana%lf", valor);
-            break;
-        case 'F':	valor = atof( &teclado[1] );
-            sprintf( msg_enviada, "anf%lf", valor);
-            break;
-        default:	printf("Opcao %c nao existe.\n", opcao);
-            continue;
-        }
+	/* 	fgets( teclado, 1000, stdin); */
+	/* 	opcao = teclado[0]; */
+	/* 	switch( opcao ) { */
+    /*     case 'x':	exit(0); */
+    /*     case 'a':	strcpy( msg_enviada, "sta0"); */
+    /*         break; */
+    /*     case 't':	strcpy( msg_enviada, "st-0"); */
+    /*         break; */
+    /*     case 'i':	strcpy( msg_enviada, "sti0"); */
+    /*         break; */
+    /*     case 'o':	strcpy( msg_enviada, "sno0"); */
+    /*         break; */
+    /*     case 'h':	strcpy( msg_enviada, "sh-0"); */
+    /*         break; */
+    /*     case 'I':	valor = atof( &teclado[1] ); */
+    /*         sprintf( msg_enviada, "ani%lf", valor); */
+    /*         break; */
+    /*     case 'Q':	valor = atof( &teclado[1] ); */
+    /*         sprintf( msg_enviada, "aq-%lf", valor); */
+    /*         break; */
+    /*     case 'A':	valor = atof( &teclado[1] ); */
+    /*         sprintf( msg_enviada, "ana%lf", valor); */
+    /*         break; */
+    /*     case 'F':	valor = atof( &teclado[1] ); */
+    /*         sprintf( msg_enviada, "anf%lf", valor); */
+    /*         break; */
+    /*     default:	printf("Opcao %c nao existe.\n", opcao); */
+    /*         continue; */
+    /*     } */
 
-		printf("Enviado: %s\n", msg_enviada);
-		envia_mensagem(socket_local, endereco_destino, msg_enviada);
+	/* 	printf("Enviado: %s\n", msg_enviada); */
+	/* 	envia_mensagem(socket_local, endereco_destino, msg_enviada); */
 
-		nrec = recebe_mensagem(socket_local, msg_recebida, 1000);
-		msg_recebida[nrec] = '\0';
-		printf("Mensagem de resposta com %d bytes >>>%s<<<\n", nrec, msg_recebida);
+	/* 	nrec = recebe_mensagem(socket_local, msg_recebida, 1000); */
+	/* 	msg_recebida[nrec] = '\0'; */
+	/* 	printf("Mensagem de resposta com %d bytes >>>%s<<<\n", nrec, msg_recebida); */
 
-	} while( opcao != 'x' );
+	/* } while (opcao != 'x'); */
 
+    return 0;
 }
