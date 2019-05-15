@@ -26,13 +26,29 @@ float VA[4];
 typedef int socket_udp;
 
 //Thread 1
-void ler_sensores(float *vs,socket_udp *s);
+void ler_sensores(float *vs,socket_udp s,struct sockaddr_in endereco_destino);
 //Thread 2
-void ler_atuadores(float *va,socket_udp *s);
+void ler_atuadores(float *va,socket_udp s,struct sockaddr_in endereco_destino);
 //Thread 3
 void imprimir_valores(float *vs,float *va);
 
 //------------------------------------------
+
+float extrair_num (char *s,int k){
+  int n = strlen(s);
+  char sub_s[1000];
+
+  for (int i = k; i < n; i++) {
+    sub_s[i-k] = s[i];
+  }
+
+  float x = atof(sub_s);
+  return x;
+}
+
+
+
+
 
 int cria_socket_local(void)
 {
@@ -97,7 +113,17 @@ int recebe_mensagem(int socket_local, char *buffer, int TAM_BUFFER)
 	return bytes_recebidos;
 }
 
+void ler_sensores(float *vs,socket_udp s,struct sockaddr_in endereco_destino){
+  char msg_enviada[1000];
+  char msg_recebida[1000];
+  int nrec;
   
+  strcpy(msg_enviada, "sta0");
+  envia_mensagem(s,endereco_destino,msg_enviada);
+  nrec = recebe_mensagem(s,msg_recebida,1000);
+  msg_recebida[nrec] = '\0';
+  vs[0] = extrair_num(msg_recebida,3);
+}  
 
 int main(int argc, char *argv[])
 {
