@@ -46,6 +46,16 @@ float extrair_num (char *s,int k){
     return x;
 }
 
+void imprimir_valores(float *vs, float *va) {
+    printf("== SENSORES\n");
+    printf("Ta: \t%.2f\n ", vs[0]);
+    printf("T: \t%.2f\n ", vs[1]);
+    printf("Ti: \t%.2f\n ", vs[2]);
+    printf("No: \t%.2f\n ", vs[3]);
+    printf("H: \t%.2f\n ", vs[4]);
+
+    printf("== ATUADORES");
+}
 
 int cria_socket_local(void) {
 	int socket_local;		/* Socket usado na comunicacao */
@@ -106,17 +116,28 @@ int recebe_mensagem(int socket_local, char *buffer, int TAM_BUFFER) {
 	return bytes_recebidos;
 }
 
-
-void ler_sensores(float *vs,socket_udp s,struct sockaddr_in endereco_destino){
-    char msg_enviada[1000];
+float ler_sensor(socket_udp s, struct sockaddr_in endereco_destino, char* requisicao) {
     char msg_recebida[1000];
     int nrec;
 
-    strcpy(msg_enviada, "sta0");
-    envia_mensagem(s,endereco_destino,msg_enviada);
+
+    envia_mensagem(s,endereco_destino, requisicao);
     nrec = recebe_mensagem(s,msg_recebida,1000);
     msg_recebida[nrec] = '\0';
-    vs[0] = extrair_num(msg_recebida,3);
+    return extrair_num(msg_recebida,3);
+}
+
+void ler_sensores(float *vs,socket_udp s,struct sockaddr_in endereco_destino){
+    float ta = ler_sensor(s, endereco_destino, "sta0");
+    float t = ler_sensor(s, endereco_destino, "st-0");
+    float ti = ler_sensor(s, endereco_destino, "sti0");
+    float no = ler_sensor(s, endereco_destino, "sto0");
+    float h = ler_sensor(s, endereco_destino, "sh-0");
+    vs[0] = ta;
+    vs[1] = t;
+    vs[2] = ti;
+    vs[3] = no;
+    vs[4] = h;
 }
 
 
@@ -136,64 +157,68 @@ int main(int argc, char *argv[]) {
 
 	struct sockaddr_in endereco_destino = cria_endereco_destino(argv[1], porta_destino);
 
+    ler_sensores(VS, socket_local, endereco_destino);
+    imprimir_valores(VS, VA);
 
-	char opcao;
-	do {
-		char teclado[1000];
-		double valor;
-		char msg_enviada[1000];
-		char msg_recebida[1000];
-		int nrec;
+	/* char opcao; */
+	/* do { */
+	/* 	char teclado[1000]; */
+	/* 	double valor; */
+	/* 	char msg_enviada[1000]; */
+	/* 	char msg_recebida[1000]; */
+	/* 	int nrec; */
 
-		printf("\n");   //\\Digite a letra da opcao seguida pelo valor, no caso de atuadores:);
-		printf("<x> Termina o programa\n");
-		printf("<a> Lê valor de Ta\n");
-		printf("<t> Lê valor de T\n");
-		printf("<i> Lê valor de Ti\n");
-		printf("<o> Lê valor de No\n");
-		printf("<h> Lê valor de H\n");
-		printf("<I><valor> Define valor de Ni\n");
-		printf("<Q><valor> Define valor de Q\n");
-		printf("<A><valor> Define valor de Na\n");
-		printf("<F><valor> Define valor de Nf\n");
-		printf("Digite a letra da opcao seguida pelo valor, no caso de atuadores:\n");
+	/* 	printf("\n");   //\\Digite a letra da opcao seguida pelo valor, no caso de atuadores:); */
+	/* 	printf("<x> Termina o programa\n"); */
+	/* 	printf("<a> Lê valor de Ta\n"); */
+	/* 	printf("<t> Lê valor de T\n"); */
+	/* 	printf("<i> Lê valor de Ti\n"); */
+	/* 	printf("<o> Lê valor de No\n"); */
+	/* 	printf("<h> Lê valor de H\n"); */
+	/* 	printf("<I><valor> Define valor de Ni\n"); */
+	/* 	printf("<Q><valor> Define valor de Q\n"); */
+	/* 	printf("<A><valor> Define valor de Na\n"); */
+	/* 	printf("<F><valor> Define valor de Nf\n"); */
+	/* 	printf("Digite a letra da opcao seguida pelo valor, no caso de atuadores:\n"); */
 
-		fgets( teclado, 1000, stdin);
-		opcao = teclado[0];
-		switch( opcao ) {
-        case 'x':	exit(0);
-        case 'a':	strcpy( msg_enviada, "sta0");
-            break;
-        case 't':	strcpy( msg_enviada, "st-0");
-            break;
-        case 'i':	strcpy( msg_enviada, "sti0");
-            break;
-        case 'o':	strcpy( msg_enviada, "sno0");
-            break;
-        case 'h':	strcpy( msg_enviada, "sh-0");
-            break;
-        case 'I':	valor = atof( &teclado[1] );
-            sprintf( msg_enviada, "ani%lf", valor);
-            break;
-        case 'Q':	valor = atof( &teclado[1] );
-            sprintf( msg_enviada, "aq-%lf", valor);
-            break;
-        case 'A':	valor = atof( &teclado[1] );
-            sprintf( msg_enviada, "ana%lf", valor);
-            break;
-        case 'F':	valor = atof( &teclado[1] );
-            sprintf( msg_enviada, "anf%lf", valor);
-            break;
-        default:	printf("Opcao %c nao existe.\n", opcao);
-            continue;
-        }
+	/* 	fgets( teclado, 1000, stdin); */
+	/* 	opcao = teclado[0]; */
+	/* 	switch( opcao ) { */
+    /*     case 'x':	exit(0); */
+    /*     case 'a':	strcpy( msg_enviada, "sta0"); */
+    /*         break; */
+    /*     case 't':	strcpy( msg_enviada, "st-0"); */
+    /*         break; */
+    /*     case 'i':	strcpy( msg_enviada, "sti0"); */
+    /*         break; */
+    /*     case 'o':	strcpy( msg_enviada, "sno0"); */
+    /*         break; */
+    /*     case 'h':	strcpy( msg_enviada, "sh-0"); */
+    /*         break; */
+    /*     case 'I':	valor = atof( &teclado[1] ); */
+    /*         sprintf( msg_enviada, "ani%lf", valor); */
+    /*         break; */
+    /*     case 'Q':	valor = atof( &teclado[1] ); */
+    /*         sprintf( msg_enviada, "aq-%lf", valor); */
+    /*         break; */
+    /*     case 'A':	valor = atof( &teclado[1] ); */
+    /*         sprintf( msg_enviada, "ana%lf", valor); */
+    /*         break; */
+    /*     case 'F':	valor = atof( &teclado[1] ); */
+    /*         sprintf( msg_enviada, "anf%lf", valor); */
+    /*         break; */
+    /*     default:	printf("Opcao %c nao existe.\n", opcao); */
+    /*         continue; */
+    /*     } */
 
-		printf("Enviado: %s\n", msg_enviada);
-		envia_mensagem(socket_local, endereco_destino, msg_enviada);
+	/* 	printf("Enviado: %s\n", msg_enviada); */
+	/* 	envia_mensagem(socket_local, endereco_destino, msg_enviada); */
 
-		nrec = recebe_mensagem(socket_local, msg_recebida, 1000);
-		msg_recebida[nrec] = '\0';
-		printf("Mensagem de resposta com %d bytes >>>%s<<<\n", nrec, msg_recebida);
+	/* 	nrec = recebe_mensagem(socket_local, msg_recebida, 1000); */
+	/* 	msg_recebida[nrec] = '\0'; */
+	/* 	printf("Mensagem de resposta com %d bytes >>>%s<<<\n", nrec, msg_recebida); */
 
-	} while (opcao != 'x');
+	/* } while (opcao != 'x'); */
+
+    return 0;
 }
