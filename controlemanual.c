@@ -15,43 +15,39 @@
 
 #define FALHA 1
 
-//------------------------------------------
+// ------------------------------------------
 
-//Vetor de sensores
+// Vetor de sensores
 float VS[5];
-//Vetor de atuadors
+// Vetor de atuadors
 float VA[4];
 
-//Alias do socket
+// Alias do socket
 typedef int socket_udp;
 
-//Thread 1
+// Thread 1
 void ler_sensores(float *vs,socket_udp s,struct sockaddr_in endereco_destino);
-//Thread 2
+// Thread 2
 void ler_atuadores(float *va,socket_udp s,struct sockaddr_in endereco_destino);
-//Thread 3
+// Thread 3
 void imprimir_valores(float *vs,float *va);
 
-//------------------------------------------
+// ------------------------------------------
 
 float extrair_num (char *s,int k){
-  int n = strlen(s);
-  char sub_s[1000];
+    int n = strlen(s);
+    char sub_s[1000];
 
-  for (int i = k; i < n; i++) {
-    sub_s[i-k] = s[i];
-  }
+    for (int i = k; i < n; i++) {
+        sub_s[i-k] = s[i];
+    }
 
-  float x = atof(sub_s);
-  return x;
+    float x = atof(sub_s);
+    return x;
 }
 
 
-
-
-
-int cria_socket_local(void)
-{
+int cria_socket_local(void) {
 	int socket_local;		/* Socket usado na comunicacao */
 
 	socket_local = socket( PF_INET, SOCK_DGRAM, 0);
@@ -62,11 +58,10 @@ int cria_socket_local(void)
 	return socket_local;
 }
 
-struct sockaddr_in cria_endereco_destino(char *destino, int porta_destino)
-{
+struct sockaddr_in cria_endereco_destino(char *destino, int porta_destino) {
 	struct sockaddr_in servidor;	/* Endereco do servidor incluindo ip e porta */
-	struct hostent *dest_internet;	/* Endereco destino em formato proprio */
-	struct in_addr dest_ip;			/* Endereco destino em formato ip numerico */
+	struct hostent *dest_internet;	/* Endereco destino em formato proprio       */
+	struct in_addr dest_ip;			/* Endereco destino em formato ip numerico   */
 
 	if (inet_aton ( destino, &dest_ip ))
 		dest_internet = gethostbyaddr((char *)&dest_ip, sizeof(dest_ip), AF_INET);
@@ -87,8 +82,7 @@ struct sockaddr_in cria_endereco_destino(char *destino, int porta_destino)
 }
 
 
-void envia_mensagem(int socket_local, struct sockaddr_in endereco_destino, char *mensagem)
-{
+void envia_mensagem(int socket_local, struct sockaddr_in endereco_destino, char *mensagem) {
 	/* Envia msg ao servidor */
 
 	if (sendto(socket_local, mensagem, strlen(mensagem)+1, 0, (struct sockaddr *) &endereco_destino, sizeof(endereco_destino)) < 0 )
@@ -99,9 +93,8 @@ void envia_mensagem(int socket_local, struct sockaddr_in endereco_destino, char 
 }
 
 
-int recebe_mensagem(int socket_local, char *buffer, int TAM_BUFFER)
-{
-	int bytes_recebidos;		/* Numero de bytes recebidos */
+int recebe_mensagem(int socket_local, char *buffer, int TAM_BUFFER) {
+	int bytes_recebidos;   /* Numero de bytes recebidos */
 
 	/* Espera pela msg de resposta do servidor */
 	bytes_recebidos = recvfrom(socket_local, buffer, TAM_BUFFER, 0, NULL, 0);
@@ -113,20 +106,21 @@ int recebe_mensagem(int socket_local, char *buffer, int TAM_BUFFER)
 	return bytes_recebidos;
 }
 
-void ler_sensores(float *vs,socket_udp s,struct sockaddr_in endereco_destino){
-  char msg_enviada[1000];
-  char msg_recebida[1000];
-  int nrec;
-  
-  strcpy(msg_enviada, "sta0");
-  envia_mensagem(s,endereco_destino,msg_enviada);
-  nrec = recebe_mensagem(s,msg_recebida,1000);
-  msg_recebida[nrec] = '\0';
-  vs[0] = extrair_num(msg_recebida,3);
-}  
 
-int main(int argc, char *argv[])
-{
+void ler_sensores(float *vs,socket_udp s,struct sockaddr_in endereco_destino){
+    char msg_enviada[1000];
+    char msg_recebida[1000];
+    int nrec;
+
+    strcpy(msg_enviada, "sta0");
+    envia_mensagem(s,endereco_destino,msg_enviada);
+    nrec = recebe_mensagem(s,msg_recebida,1000);
+    msg_recebida[nrec] = '\0';
+    vs[0] = extrair_num(msg_recebida,3);
+}
+
+
+int main(int argc, char *argv[]) {
 	if (argc < 3) {
 		fprintf(stderr,"Uso: controlemanual <endereco> <porta>\n");
 		fprintf(stderr,"<endereco> eh o endereco IP da caldeira\n");
@@ -144,7 +138,7 @@ int main(int argc, char *argv[])
 
 
 	char opcao;
-	do{
+	do {
 		char teclado[1000];
 		double valor;
 		char msg_enviada[1000];
@@ -201,6 +195,5 @@ int main(int argc, char *argv[])
 		msg_recebida[nrec] = '\0';
 		printf("Mensagem de resposta com %d bytes >>>%s<<<\n", nrec, msg_recebida);
 
-	} while( opcao != 'x' );
-
+	} while (opcao != 'x');
 }
