@@ -15,6 +15,24 @@
 
 #define FALHA 1
 
+//------------------------------------------
+
+//Vetor de sensores
+float VS[5];
+//Vetor de atuadors
+float VA[4];
+
+//Alias do socket
+typedef int socket_udp;
+
+//Thread 1
+void ler_sensores(float *vs,socket_udp *s);
+//Thread 2
+void ler_atuadores(float *va,socket_udp *s);
+//Thread 3
+void imprimir_valores(float *vs,float *va);
+
+//------------------------------------------
 
 int cria_socket_local(void)
 {
@@ -78,6 +96,8 @@ int recebe_mensagem(int socket_local, char *buffer, int TAM_BUFFER)
 
 	return bytes_recebidos;
 }
+
+  
 
 int main(int argc, char *argv[])
 {
