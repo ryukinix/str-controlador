@@ -16,7 +16,6 @@
 
 #define FALHA 1
 #define NUM_THREADS 2
-#define NSEC_PER_SEC 1000000000
 
 // ------------------------------------------
 
@@ -52,7 +51,7 @@ void *imprimir_valores(float *vs) {
     printf("Ti: \t%.2f\n ", vs[2]);
     printf("No: \t%.2f\n ", vs[3]);
     printf("H: \t%.2f\n ", vs[4]);
-  
+
 }
 
 int cria_socket_local(void) {
@@ -134,17 +133,13 @@ void *ler_sensores(float *vs,socket_udp s,struct sockaddr_in endereco_destino){
     vs[2] = ti;
     vs[3] = no;
     vs[4] = h;
-    
+    pthread_exit(NULL);
 }
 
 int main(int argc, char *argv[]) {
-
-        struct timespec t;
-        long int periodo = 500000000; //1s
-
-        clock_gettime(CLOCK_MONOTONIC, &t);
-        t.tv_sec++;
         pthread_t threads[NUM_THREADS];
+        int rc;
+        long t;
 
 	if (argc < 3) {
 		fprintf(stderr,"Uso: controlemanual <endereco> <porta>\n");
@@ -160,20 +155,9 @@ int main(int argc, char *argv[]) {
 	int socket_local = cria_socket_local();
 
 	struct sockaddr_in endereco_destino = cria_endereco_destino(argv[1], porta_destino);
-	while(1){
-           clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME,&t,NULL);
-	   
-    	   pthread_create(&threads[0],NULL,ler_sensores(VS, socket_local, endereco_destino),(void *)1);
-           pthread_create(&threads[1],NULL,imprimir_valores(VS),(void *)1);
-	   pthread_exit(NULL);
 
-	   t.tv_nsec += periodo;
-	
-	   while(t.tv_nsec >= NSEC_PER_SEC){
-	     t.tv_nsec -= NSEC_PER_SEC;
-	     t.tv_sec++;
-	   }
-	}
+	pthread_create(&threads[0],NULL,ler_sensores(VS, socket_local, endereco_destino),(void *)1);
+        pthread_create(&threads[1],NULL,imprimir_valores(VS),(void *)1);
 
 	/* char opcao; */
 	/* do { */
