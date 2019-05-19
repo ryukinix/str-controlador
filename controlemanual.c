@@ -23,16 +23,73 @@
 // Vetor de sensores
 float VS[5];
 
-// Alias do socket
-typedef int socket_udp;
-
-// Thread 1
-void *ler_sensores(float *vs,socket_udp s,struct sockaddr_in endereco_destino);
-// Thread 2
-void *imprimir_valores(float *vs);
+// Estrutura de argumentos para passar para ler_sensores_periodico
+typedef struct {
+    float *vs;
+    int socket;
+    struct sockaddr_in endereco_destino;
+} args_sensores;
 
 // ------------------------------------------
 
+
+int cria_socket_local(void) {
+    int socket_local;       /* Socket usado na comunicacao */
+
+    socket_local = socket( PF_INET, SOCK_DGRAM, 0);
+    if (socket_local < 0) {
+        perror("socket");
+        return -1;
+    }
+    return socket_local;
+}
+
+struct sockaddr_in cria_endereco_destino(char *destino, int porta_destino) {
+    struct sockaddr_in servidor;    /* Endereco do servidor incluindo ip e porta */
+    struct hostent *dest_internet;  /* Endereco destino em formato proprio       */
+    struct in_addr dest_ip;     /* Endereco destino em formato ip numerico   */
+
+    if (inet_aton ( destino, &dest_ip ))
+        dest_internet = gethostbyaddr((char *)&dest_ip, sizeof(dest_ip), AF_INET);
+    else
+        dest_internet = gethostbyname(destino);
+
+    if (dest_internet == NULL) {
+        fprintf(stderr,"Endereco de rede invalido\n");
+        exit(FALHA);
+    }
+
+    memset((char *) &servidor, 0, sizeof(servidor));
+    memcpy(&servidor.sin_addr, dest_internet->h_addr_list[0], sizeof(servidor.sin_addr));
+    servidor.sin_family = AF_INET;
+    servidor.sin_port = htons(porta_destino);
+
+    return servidor;
+}
+
+void envia_mensagem(int socket, struct sockaddr_in endereco_destino, char *mensagem) {
+    /* Envia msg ao servidor */
+
+    if (sendto(socket, mensagem, strlen(mensagem)+1, 0, (struct sockaddr *) &endereco_destino, sizeof(endereco_destino)) < 0 ) {
+        perror("sendto");
+        return;
+    }
+}
+
+int recebe_mensagem(int socket_local, char *buffer, int TAM_BUFFER) {
+    int bytes_recebidos;   /* Numero de bytes recebidos */
+
+    /* Espera pela msg de resposta do servidor */
+    bytes_recebidos = recvfrom(socket_local, buffer, TAM_BUFFER, 0, NULL, 0);
+    if (bytes_recebidos < 0)
+    {
+        perror("recvfrom");
+    }
+
+    return bytes_recebidos;
+}
+
+// sta30.0 -> 30.0
 float extrair_num (char *s,int k){
     int n = strlen(s);
     char sub_s[1000];
@@ -45,195 +102,124 @@ float extrair_num (char *s,int k){
     return x;
 }
 
-void *imprimir_valores(float *vs) {
-    printf("== SENSORES\n");
-    printf("Ta: \t%.2f\n ", vs[0]);
-    printf("T: \t%.2f\n ", vs[1]);
-    printf("Ti: \t%.2f\n ", vs[2]);
-    printf("No: \t%.2f\n ", vs[3]);
-    printf("H: \t%.2f\n ", vs[4]);
-  
-}
-
-int cria_socket_local(void) {
-	int socket_local;		/* Socket usado na comunicacao */
-
-	socket_local = socket( PF_INET, SOCK_DGRAM, 0);
-	if (socket_local < 0) {
-		perror("socket");
-		return -1;
-	}
-	return socket_local;
-}
-
-struct sockaddr_in cria_endereco_destino(char *destino, int porta_destino) {
-	struct sockaddr_in servidor;	/* Endereco do servidor incluindo ip e porta */
-	struct hostent *dest_internet;	/* Endereco destino em formato proprio       */
-	struct in_addr dest_ip;		/* Endereco destino em formato ip numerico   */
-
-	if (inet_aton ( destino, &dest_ip ))
-		dest_internet = gethostbyaddr((char *)&dest_ip, sizeof(dest_ip), AF_INET);
-	else
-		dest_internet = gethostbyname(destino);
-
-	if (dest_internet == NULL) {
-		fprintf(stderr,"Endereco de rede invalido\n");
-		exit(FALHA);
-	}
-
-	memset((char *) &servidor, 0, sizeof(servidor));
-	memcpy(&servidor.sin_addr, dest_internet->h_addr_list[0], sizeof(servidor.sin_addr));
-	servidor.sin_family = AF_INET;
-	servidor.sin_port = htons(porta_destino);
-
-	return servidor;
-}
-
-void envia_mensagem(int socket_local, struct sockaddr_in endereco_destino, char *mensagem) {
-	/* Envia msg ao servidor */
-
-	if (sendto(socket_local, mensagem, strlen(mensagem)+1, 0, (struct sockaddr *) &endereco_destino, sizeof(endereco_destino)) < 0 )
-	{
-		perror("sendto");
-		return;
-	}
-}
-
-int recebe_mensagem(int socket_local, char *buffer, int TAM_BUFFER) {
-	int bytes_recebidos;   /* Numero de bytes recebidos */
-
-	/* Espera pela msg de resposta do servidor */
-	bytes_recebidos = recvfrom(socket_local, buffer, TAM_BUFFER, 0, NULL, 0);
-	if (bytes_recebidos < 0)
-	{
-		perror("recvfrom");
-	}
-
-	return bytes_recebidos;
-}
-
-float ler_sensor(socket_udp s, struct sockaddr_in endereco_destino, char* requisicao) {
+// Lê um dos sensores baseado na requisição:
+// sta0 -> ta : Temperatura do Ar do Ambiente
+// st-0 -> t  : Temperatura da água no interior
+// sti0 -> ti : Temperatura do água que entra no recipiente
+// sto0 -> no : Fluxo de água de saída do recipiente
+// sh-0 -> h  : Altura da coluna de água
+float ler_sensor(int socket, struct sockaddr_in endereco_destino, char* requisicao) {
     char msg_recebida[1000];
     int nrec;
 
-    envia_mensagem(s,endereco_destino, requisicao);
-    nrec = recebe_mensagem(s,msg_recebida,1000);
+    envia_mensagem(socket,endereco_destino, requisicao);
+    nrec = recebe_mensagem(socket,msg_recebida,1000);
     msg_recebida[nrec] = '\0';
     return extrair_num(msg_recebida,3);
 }
 
-void *ler_sensores(float *vs,socket_udp s,struct sockaddr_in endereco_destino){
-    float ta = ler_sensor(s, endereco_destino, "sta0");
-    float t = ler_sensor(s, endereco_destino, "st-0");
-    float ti = ler_sensor(s, endereco_destino, "sti0");
-    float no = ler_sensor(s, endereco_destino, "sto0");
-    float h = ler_sensor(s, endereco_destino, "sh-0");
+// Lê todos os 5 sensores disponíveis no sistema.
+void ler_sensores(float *vs, int socket, struct sockaddr_in endereco_destino){
+    float ta = ler_sensor(socket, endereco_destino, "sta0");
+    float t = ler_sensor(socket, endereco_destino, "st-0");
+    float ti = ler_sensor(socket, endereco_destino, "sti0");
+    float no = ler_sensor(socket, endereco_destino, "sto0");
+    float h = ler_sensor(socket, endereco_destino, "sh-0");
 
     vs[0] = ta;
     vs[1] = t;
     vs[2] = ti;
     vs[3] = no;
     vs[4] = h;
-    
+}
+
+// co-rotina periódica para ler sensores de maneira periódica
+// args: float *vs, int socket, struct sockaddr_in endereco_destino
+void *ler_sensores_periodico(void *args) {
+    struct timespec t;
+    args_sensores* parametros =  args;
+    float *vs = parametros->vs;
+    int socket = parametros->socket;
+    struct sockaddr_in endereco_destino = parametros->endereco_destino;
+
+    // float *vs, int socket, struct sockaddr_in endereco_destino
+    t.tv_sec++;
+    long int periodo = 500000000; //0.5s
+    clock_gettime(CLOCK_MONOTONIC, &t);
+
+    while (1) {
+        clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME,&t,NULL);
+        ler_sensores(vs, socket, endereco_destino);
+        t.tv_nsec += periodo;
+
+        while(t.tv_nsec >= NSEC_PER_SEC){
+            t.tv_nsec -= NSEC_PER_SEC;
+            t.tv_sec++;
+        }
+    }
+
+}
+
+// Imprime os valores dos sensores
+void imprimir_valores(float *vs) {
+    printf("== SENSORES\n");
+    printf("Ta: \t%.2f\n ", vs[0]);
+    printf("T: \t%.2f\n ", vs[1]);
+    printf("Ti: \t%.2f\n ", vs[2]);
+    printf("No: \t%.2f\n ", vs[3]);
+    printf("H: \t%.2f\n ", vs[4]);
+}
+
+// co-rotina periódica para imprimir valores
+void *imprimir_valores_periodico(void *arg) {
+    // arg: float vs
+    float *vs = (float*) arg;
+    struct timespec t;
+    t.tv_sec++;
+    long int periodo = 1000000000; //1s
+    clock_gettime(CLOCK_MONOTONIC, &t);
+
+    while (1) {
+        clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME,&t,NULL);
+        imprimir_valores(vs);
+        t.tv_nsec += periodo;
+
+        while(t.tv_nsec >= NSEC_PER_SEC){
+            t.tv_nsec -= NSEC_PER_SEC;
+            t.tv_sec++;
+        }
+    }
 }
 
 int main(int argc, char *argv[]) {
+    if (argc < 3) {
+        fprintf(stderr, "Uso: controlemanual <endereco> <porta>\n");
+        fprintf(stderr, "<endereco> eh o endereco IP da caldeira\n");
+        fprintf(stderr, "<porta> eh o numero da porta UDP da caldeira\n");
+        fprintf(stderr, "Exemplo de uso:\n");
+        fprintf(stderr, "   controlemanual localhost 12345\n");
+        exit(FALHA);
+    }
 
-        struct timespec t;
-        long int periodo = 500000000; //1s
+    // extração de parâmetros de argv
+    int porta_destino = atoi(argv[2]);
+    int socket_local = cria_socket_local();
+    struct sockaddr_in endereco_destino = cria_endereco_destino(
+        argv[1],
+        porta_destino
+    );
 
-        clock_gettime(CLOCK_MONOTONIC, &t);
-        t.tv_sec++;
-        pthread_t threads[NUM_THREADS];
+    // empacotamento de argumentos para a thread ler_sensores_periodico
+    args_sensores args;
+    args.vs = VS;
+    args.socket = socket_local;
+    args.endereco_destino = endereco_destino;
 
-	if (argc < 3) {
-		fprintf(stderr,"Uso: controlemanual <endereco> <porta>\n");
-		fprintf(stderr,"<endereco> eh o endereco IP da caldeira\n");
-		fprintf(stderr,"<porta> eh o numero da porta UDP da caldeira\n");
-		fprintf(stderr,"Exemplo de uso:\n");
-		fprintf(stderr,"   controlemanual localhost 12345\n");
-		exit(FALHA);
-	}
-
-	int porta_destino = atoi( argv[2]);
-
-	int socket_local = cria_socket_local();
-
-	struct sockaddr_in endereco_destino = cria_endereco_destino(argv[1], porta_destino);
-	while(1){
-           clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME,&t,NULL);
-	   
-    	   pthread_create(&threads[0],NULL,ler_sensores(VS, socket_local, endereco_destino),(void *)1);
-           pthread_create(&threads[1],NULL,imprimir_valores(VS),(void *)1);
-	   pthread_exit(NULL);
-
-	   t.tv_nsec += periodo;
-	
-	   while(t.tv_nsec >= NSEC_PER_SEC){
-	     t.tv_nsec -= NSEC_PER_SEC;
-	     t.tv_sec++;
-	   }
-	}
-
-	/* char opcao; */
-	/* do { */
-	/* 	char teclado[1000]; */
-	/* 	double valor; */
-	/* 	char msg_enviada[1000]; */
-	/* 	char msg_recebida[1000]; */
-	/* 	int nrec; */
-
-	/* 	printf("\n");   //\\Digite a letra da opcao seguida pelo valor, no caso de atuadores:); */
-	/* 	printf("<x> Termina o programa\n"); */
-	/* 	printf("<a> Lê valor de Ta\n"); */
-	/* 	printf("<t> Lê valor de T\n"); */
-	/* 	printf("<i> Lê valor de Ti\n"); */
-	/* 	printf("<o> Lê valor de No\n"); */
-	/* 	printf("<h> Lê valor de H\n"); */
-	/* 	printf("<I><valor> Define valor de Ni\n"); */
-	/* 	printf("<Q><valor> Define valor de Q\n"); */
-	/* 	printf("<A><valor> Define valor de Na\n"); */
-	/* 	printf("<F><valor> Define valor de Nf\n"); */
-	/* 	printf("Digite a letra da opcao seguida pelo valor, no caso de atuadores:\n"); */
-
-	/* 	fgets( teclado, 1000, stdin); */
-	/* 	opcao = teclado[0]; */
-	/* 	switch( opcao ) { */
-    /*     case 'x':	exit(0); */
-    /*     case 'a':	strcpy( msg_enviada, "sta0"); */
-    /*         break; */
-    /*     case 't':	strcpy( msg_enviada, "st-0"); */
-    /*         break; */
-    /*     case 'i':	strcpy( msg_enviada, "sti0"); */
-    /*         break; */
-    /*     case 'o':	strcpy( msg_enviada, "sno0"); */
-    /*         break; */
-    /*     case 'h':	strcpy( msg_enviada, "sh-0"); */
-    /*         break; */
-    /*     case 'I':	valor = atof( &teclado[1] ); */
-    /*         sprintf( msg_enviada, "ani%lf", valor); */
-    /*         break; */
-    /*     case 'Q':	valor = atof( &teclado[1] ); */
-    /*         sprintf( msg_enviada, "aq-%lf", valor); */
-    /*         break; */
-    /*     case 'A':	valor = atof( &teclado[1] ); */
-    /*         sprintf( msg_enviada, "ana%lf", valor); */
-    /*         break; */
-    /*     case 'F':	valor = atof( &teclado[1] ); */
-    /*         sprintf( msg_enviada, "anf%lf", valor); */
-    /*         break; */
-    /*     default:	printf("Opcao %c nao existe.\n", opcao); */
-    /*         continue; */
-    /*     } */
-
-	/* 	printf("Enviado: %s\n", msg_enviada); */
-	/* 	envia_mensagem(socket_local, endereco_destino, msg_enviada); */
-
-	/* 	nrec = recebe_mensagem(socket_local, msg_recebida, 1000); */
-	/* 	msg_recebida[nrec] = '\0'; */
-	/* 	printf("Mensagem de resposta com %d bytes >>>%s<<<\n", nrec, msg_recebida); */
-
-	/* } while (opcao != 'x'); */
+    ler_sensores(VS, socket_local, endereco_destino);
+    pthread_t threads[NUM_THREADS];
+    pthread_create(&threads[0], NULL, ler_sensores_periodico, (void *) &args);
+    pthread_create(&threads[1], NULL, imprimir_valores_periodico, (void *) VS);
+    pthread_exit(NULL);
 
     return 0;
 }
