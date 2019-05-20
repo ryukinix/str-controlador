@@ -14,5 +14,7 @@ server:
 run: compile
 	./$(PROGRAM) $(HOST) $(PORT)
 
+pdf: README.md
+	pandoc README.md --to latex -o README.pdf
 
 .PHONY: server run
