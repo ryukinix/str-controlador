@@ -15,7 +15,7 @@
 #include <pthread.h>
 
 #define FALHA 1
-#define NUM_THREADS 3
+#define NUM_THREADS 4
 #define NSEC_PER_SEC 1000000000
 
 // ------------------------------------------
@@ -137,9 +137,71 @@ void ler_sensores(float *vs, int socket, struct sockaddr_in endereco_destino){
 }
 
 //=======================================================================
+/*                          THREAD ALARME                              */
+
+void alarme(int bool){
+
+  if(bool == 1) printf("\nBIP!!!\n");
+  
+}
+
+//=======================================================================
+
+//=======================================================================
+/*                          THREAD TEMP_ALARME                        */
+
+int temp_alarme(float *vs){
+
+  if(vs[0] >= 50.0) return 1;
+  else return 0;
+}
+
+void *temp_alarme_periodico(void *args){
+
+  float *vs = (float*) args;
+  struct timespec t;
+  t.tv_sec++;
+  long int periodo = 50000000;//0,05s
+  clock_gettime(CLOCK_MONOTONIC,&t);
+
+  while(1){
+    clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME,&t,NULL);
+    temp_alarme(vs);
+    t.tv_nsec += periodo;
+
+    while(t.tv_nsec >= NSEC_PER_SEC){
+      t.tv_nsec -= NSEC_PER_SEC;
+      t.tv_sec++;
+    }
+  }
+}
+//=======================================================================
+
+
+void *alarme_periodico(void *args){
+
+  float *vs = (float*) args;
+  struct timespec t;
+  t.tv_sec++;
+  long int periodo = 4000000000;//0,5s
+  clock_gettime(CLOCK_MONOTONIC,&t);
+
+  while(1){
+    clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME,&t,NULL);
+    alarme(temp_alarme(vs));
+    t.tv_nsec += periodo;
+
+    while(t.tv_nsec >= NSEC_PER_SEC){
+      t.tv_nsec -= NSEC_PER_SEC;
+      t.tv_sec++;
+    }
+  }
+} 
+
+
 /*
+//=======================================================================
                       THREAD ARMAZENAR
-*/
 
 void armanezar_temp_nv(float *vs){
     FILE *arq_hist;
@@ -172,7 +234,7 @@ void *armazenar_temp_nv_periodico(void *args){
 
     }
 }
-
+*/
 //=======================================================================
 
 // co-rotina periódica para ler sensores de maneira periódica
@@ -262,7 +324,9 @@ int main(int argc, char *argv[]) {
     pthread_t threads[NUM_THREADS];
     pthread_create(&threads[0], NULL, ler_sensores_periodico, (void *) &args);
     pthread_create(&threads[1], NULL, imprimir_valores_periodico, (void *) VS);
-    pthread_create(&threads[2], NULL, armazenar_temp_nv_periodico, (void* ) VS);
+    //pthread_create(&threads[2], NULL, armazenar_temp_nv_periodico, (void* ) VS);
+    pthread_create(&threads[2], NULL, temp_alarme_periodico, (void* ) VS);
+    pthread_create(&threads[3], NULL, alarme_periodico, (void* ) VS);
     pthread_exit(NULL);
 
     return 0;
