@@ -137,6 +137,18 @@ void ler_sensores(float *vs, int socket, struct sockaddr_in endereco_destino){
 /*
                       THREAD ARMAZENAR
 */
+
+void armanezar_temp_nv(float *vs){
+  FILE *arq_hist;
+    
+  arq_hist = fopen("historico.txt","a");
+  if(arq_hist == NULL) printf("Erro ao abrir o arquivo");
+  fprintf(arq_hist,"T,%f\n",vs[0]);
+  fprintf(arq_hist,"N,%f\n",vs[4]);
+
+  fclose(arq_hist);
+}
+
 void *armazenar_temp_nv_periodico(void *args){
 
   float *vs = (float*) args;
@@ -158,17 +170,8 @@ void *armazenar_temp_nv_periodico(void *args){
   }
 }
 
-void armanezar_temp_nv(float *vs){
-  FILE *arq_hist;
-    
-  arq_hist = fopen("historico.txt","a");
-  if(arq_hist == NULL) printf("Erro ao abrir o arquivo");
-  fprintf(arq_hist,"T,%f\n",vs[0]);
-  fprintf(arq_hist,"N,%f\n",vs[4]);
-
-  fclose(arq_hist);
-}
 //=======================================================================
+
 // co-rotina periódica para ler sensores de maneira periódica
 // args: float *vs, int socket, struct sockaddr_in endereco_destino
 void *ler_sensores_periodico(void *args) {
