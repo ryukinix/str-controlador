@@ -15,7 +15,7 @@
 #include <pthread.h>
 
 #define FALHA 1
-#define NUM_THREADS 2
+#define NUM_THREADS 3
 #define NSEC_PER_SEC 1000000000
 
 // ------------------------------------------
@@ -69,8 +69,11 @@ struct sockaddr_in cria_endereco_destino(char *destino, int porta_destino) {
 
 void envia_mensagem(int socket, struct sockaddr_in endereco_destino, char *mensagem) {
     /* Envia msg ao servidor */
-
-    if (sendto(socket, mensagem, strlen(mensagem)+1, 0, (struct sockaddr *) &endereco_destino, sizeof(endereco_destino)) < 0 ) {
+    int endereco_size = sizeof(endereco_destino);
+    struct sockaddr* endereco_pointer = (struct sockaddr*) &endereco_destino;
+    int err = sendto(socket, mensagem, strlen(mensagem)+1,
+                     0, endereco_pointer, endereco_size);
+    if (err < 0) {
         perror("sendto");
         return;
     }
@@ -133,9 +136,49 @@ void ler_sensores(float *vs, int socket, struct sockaddr_in endereco_destino){
     vs[4] = h;
 }
 
+//=======================================================================
+/*
+                      THREAD ARMAZENAR
+*/
+
+void armanezar_temp_nv(float *vs){
+    FILE *arq_hist;
+
+    arq_hist = fopen("historico.txt","a");
+    if(arq_hist == NULL) printf("Erro ao abrir o arquivo");
+    fprintf(arq_hist,"T,%f\n",vs[0]);
+    fprintf(arq_hist,"N,%f\n",vs[4]);
+
+    fclose(arq_hist);
+}
+
+void *armazenar_temp_nv_periodico(void *args){
+
+    float *vs = (float*) args;
+    struct timespec t;
+    t.tv_sec = 1;
+    long int periodo = 400000000;
+    clock_gettime(CLOCK_MONOTONIC,&t);
+
+    while(1){
+        clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME,&t,NULL);
+        armanezar_temp_nv(vs);
+        t.tv_nsec += periodo;
+
+        while(t.tv_nsec >= NSEC_PER_SEC){
+            t.tv_nsec -= NSEC_PER_SEC;
+            t.tv_sec++;
+        }
+
+    }
+}
+
+//=======================================================================
+
 // co-rotina periódica para ler sensores de maneira periódica
 // args: float *vs, int socket, struct sockaddr_in endereco_destino
 void *ler_sensores_periodico(void *args) {
+
     struct timespec t;
     args_sensores* parametros =  args;
     float *vs = parametros->vs;
@@ -143,7 +186,7 @@ void *ler_sensores_periodico(void *args) {
     struct sockaddr_in endereco_destino = parametros->endereco_destino;
 
     // float *vs, int socket, struct sockaddr_in endereco_destino
-    t.tv_sec++;
+    t.tv_sec = 1;
     long int periodo = 500000000; //0.5s
     clock_gettime(CLOCK_MONOTONIC, &t);
 
@@ -175,7 +218,7 @@ void *imprimir_valores_periodico(void *arg) {
     // arg: float vs
     float *vs = (float*) arg;
     struct timespec t;
-    t.tv_sec++;
+    t.tv_sec = 1;
     long int periodo = 1000000000; //1s
     clock_gettime(CLOCK_MONOTONIC, &t);
 
@@ -219,7 +262,9 @@ int main(int argc, char *argv[]) {
     pthread_t threads[NUM_THREADS];
     pthread_create(&threads[0], NULL, ler_sensores_periodico, (void *) &args);
     pthread_create(&threads[1], NULL, imprimir_valores_periodico, (void *) VS);
+    pthread_create(&threads[2], NULL, armazenar_temp_nv_periodico, (void* ) VS);
     pthread_exit(NULL);
 
     return 0;
+
 }
