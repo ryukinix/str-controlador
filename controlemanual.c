@@ -314,7 +314,21 @@ void tela_temp(float *vs){
   initscr();
   cbreak();
 
+  int yMax,xMax;
+  getmaxyx(stdscr,yMax,xMax);
+
   while(1){
+
+    pthread_mutex_lock(&lock);
+
+    mvprintw(0,yMax-12,"|=====================|");
+    mvprintw(1,yMax-12,"|======SENSORES=======|");
+    mvprintw(2,yMax-12,"|=====================|");
+
+    refresh();
+
+    mvprintw(3,yMax-12,"|Nivel:%.2f          |",vs[4]);
+    mvprintw(4,yMax-12,"|Temperatura: %.2f   |",vs[1]);
 
     pthread_mutex_lock(&lock);
 
