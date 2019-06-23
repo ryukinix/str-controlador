@@ -309,7 +309,7 @@ void *imprimir_valores_periodico(void *arg) {
 //================================================================
 /*                           THREAD TELA                        */
 
-void tela(float *vs){
+void tela_temp(float *vs){
 
   initscr();
   cbreak();
@@ -332,8 +332,10 @@ void tela(float *vs){
   endwin();
 
 }
-//void test_entrada(int socket_local,struct sockaddr_in endereco_destino){
-void test_entrada(){
+
+
+void test_entrada(int socket_local,struct sockaddr_in endereco_destino){
+//void test_entrada(){
 
    initscr();
    cbreak();
@@ -346,6 +348,8 @@ void test_entrada(){
 
    keypad(stdscr,true);
 
+   pthread_mutex_lock(&lock);
+
    //pthread_mutex_lock(&lock);
 
    mvprintw(3,0,"-----------------");
@@ -356,7 +360,7 @@ void test_entrada(){
 
    //strcpy("sta0",valor1);
 
-   //envia_mensagem(socket_local,endereco_destino,valor1);
+   envia_mensagem(socket_local,endereco_destino,valor2);
 
    refresh();
 
@@ -368,7 +372,9 @@ void test_entrada(){
 }
 
 void *periodico(void *args) {
+
     // arg: float vs
+    float *vs = (float*) args;
     struct timespec t;
     t.tv_sec++;
 
@@ -382,9 +388,8 @@ void *periodico(void *args) {
 
     while (1) {
       clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME,&t,NULL);
-      test_entrada();
-      //test_entrada(socket,endereco_destino);
-	t.tv_nsec += periodo;
+      //test_entrada(vs);
+      t.tv_nsec += periodo;
 
         while(t.tv_nsec >= NSEC_PER_SEC){
 	    t.tv_nsec -= NSEC_PER_SEC;
@@ -403,8 +408,8 @@ void *tela_periodico(void *arg) {
 
     while (1) {
         clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME,&t,NULL);
-	tela(vs);
-        t.tv_nsec += periodo;
+	tela_temp(vs);
+	t.tv_nsec += periodo;
 
         while(t.tv_nsec >= NSEC_PER_SEC){
             t.tv_nsec -= NSEC_PER_SEC;
