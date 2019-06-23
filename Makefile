@@ -1,6 +1,6 @@
 CC=gcc
 PROGRAM = control.out
-CFLAGS = -g -Wall -Werror -O3 -o $(PROGRAM)
+CFLAGS = -g -Wall -O3 -o $(PROGRAM)
 CLIBS = -lrt -lpthread -lncurses
 HOST = localhost
 PORT = 9999
