@@ -21,7 +21,6 @@
 #define NSEC_PER_SEC 1000000000
 #define HISTORICO_ARQUIVO "historico.txt"
 
-pthread_mutex_t lock;
 
 // ------------------------------------------
 
@@ -276,13 +275,12 @@ void *ler_sensores_periodico(void *args) {
 // Imprime os valores dos sensores
 void imprimir_valores(float *vs) {
     printf("== SENSORES\n");
-    //printf("Ta: \t%.2f\n ", vs[0]);
-    //printf("T: \t%.2f\n ", vs[1]);
-    //printf("Ti: \t%.2f\n ", vs[2]);
-    //printf("No: \t%.2f\n ", vs[3]);
-    //printf("H: \t%.2f\n ", vs[4]);
-    printf("Temperatura: %.2f\n Nivel: %.2f \n", vs[0],vs[4]);
-    //printf("Nivel: %.2f \n", vs[4]);
+    printf("Ta: \t%.2f\n ", vs[0]);
+    printf("T: \t%.2f\n ", vs[1]);
+    printf("Ti: \t%.2f\n ", vs[2]);
+    printf("No: \t%.2f\n ", vs[3]);
+    printf("H: \t%.2f\n ", vs[4]);
+
 }
 
 // co-rotina periódica para imprimir valores
@@ -319,7 +317,6 @@ void tela_temp(float *vs){
 
   while(1){
 
-    pthread_mutex_lock(&lock);
 
     mvprintw(0,yMax-12,"|=====================|");
     mvprintw(1,yMax-12,"|======SENSORES=======|");
@@ -338,7 +335,6 @@ void tela_temp(float *vs){
 
     refresh();
 
-    pthread_mutex_unlock(&lock);
 
   }
 
@@ -457,10 +453,6 @@ int main(int argc, char *argv[]) {
     args.socket = socket_local;
     args.endereco_destino = endereco_destino;
 
-
-    if(pthread_mutex_init(&lock,NULL) !=0){
-      printf("\n mutex init falhou \n");
-    }
 
     ler_sensores(VS, socket_local, endereco_destino);
     pthread_t threads[NUM_THREADS];
