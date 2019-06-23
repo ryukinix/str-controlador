@@ -309,102 +309,27 @@ void *imprimir_valores_periodico(void *arg) {
 
 void tela_temp(float *vs){
 
-  initscr();
-  cbreak();
+    initscr();
+    cbreak();
 
-  int yMax,xMax;
-  getmaxyx(stdscr,yMax,xMax);
+    int yMax,xMax;
+    getmaxyx(stdscr,yMax,xMax);
 
-  while(1){
-
-
-    mvprintw(0,yMax-12,"|=====================|");
-    mvprintw(1,yMax-12,"|======SENSORES=======|");
-    mvprintw(2,yMax-12,"|=====================|");
-
-    refresh();
-
-    mvprintw(3,yMax-12,"|Nivel:%.2f          |",vs[4]);
-    mvprintw(4,yMax-12,"|Temperatura: %.2f   |",vs[1]);
-
-    pthread_mutex_lock(&lock);
-
-    mvprintw(0,0,"==SENSORES:");
-    mvprintw(1,0,"Temperatura: %.2f",vs[0]);
-    mvprintw(2,0,"Nível: %.2f",vs[4]);
-
-    refresh();
+    while(1){
 
 
-  }
+        mvprintw(0,yMax-12,"+======================+");
+        mvprintw(1,yMax-12,"|      SENSORES        |");
+        mvprintw(2,yMax-12,"|======================|");
 
-  getch();
-  endwin();
+        mvprintw(3,yMax-12,"| Nivel: %05.2f (m)     |",vs[4]);
+        mvprintw(4,yMax-12,"| Temp.: %05.2f (C)     |",vs[1]);
 
-}
+        mvprintw(5,yMax-12,"+======================+");
+
+        refresh();
 
 
-void test_entrada(int socket_local,struct sockaddr_in endereco_destino){
-//void test_entrada(){
-
-   initscr();
-   cbreak();
-
-   char msg_enviada[1000];
-   char msg_recebida[1000];
-   char valor1[10];
-   char valor2[10];
-   int nrec;
-
-   keypad(stdscr,true);
-
-   pthread_mutex_lock(&lock);
-
-   //pthread_mutex_lock(&lock);
-
-   mvprintw(3,0,"-----------------");
-
-   mvprintw(4,0,"Set_Temperatura:");
-
-   mvgetstr(4,16,valor1);
-
-   //strcpy("sta0",valor1);
-
-   envia_mensagem(socket_local,endereco_destino,valor2);
-
-   refresh();
-
-   //pthread_mutex_unlock(&lock);
-
-   getch();
-   endwin();
-
-}
-
-void *periodico(void *args) {
-
-    // arg: float vs
-    float *vs = (float*) args;
-    struct timespec t;
-    t.tv_sec++;
-
-    args_sensores* parametros =  args;
-    float *vs = parametros->vs;
-    int socket = parametros->socket;
-    struct sockaddr_in endereco_destino = parametros->endereco_destino;
-
-    long int periodo = 100000000; //1s
-    clock_gettime(CLOCK_MONOTONIC, &t);
-
-    while (1) {
-      clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME,&t,NULL);
-      //test_entrada(vs);
-      t.tv_nsec += periodo;
-
-        while(t.tv_nsec >= NSEC_PER_SEC){
-	    t.tv_nsec -= NSEC_PER_SEC;
-            t.tv_sec++;
-	 }
     }
 }
 
@@ -418,8 +343,8 @@ void *tela_periodico(void *arg) {
 
     while (1) {
         clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME,&t,NULL);
-	tela_temp(vs);
-	t.tv_nsec += periodo;
+        tela_temp(vs);
+        t.tv_nsec += periodo;
 
         while(t.tv_nsec >= NSEC_PER_SEC){
             t.tv_nsec -= NSEC_PER_SEC;
@@ -445,7 +370,7 @@ int main(int argc, char *argv[]) {
     struct sockaddr_in endereco_destino = cria_endereco_destino(
         argv[1],
         porta_destino
-    );
+        );
 
     // empacotamento de argumentos para a thread ler_sensores_periodico
     args_sensores args;
