@@ -13,11 +13,15 @@
 #include <stdlib.h>
 #include <netdb.h>
 #include <pthread.h>
+#include <ncurses.h>
+#include <string.h>
 
 #define FALHA 1
-#define NUM_THREADS 4
+#define NUM_THREADS 6
 #define NSEC_PER_SEC 1000000000
 #define HISTORICO_ARQUIVO "historico.txt"
+
+pthread_mutex_t lock;
 
 // ------------------------------------------
 
@@ -272,11 +276,13 @@ void *ler_sensores_periodico(void *args) {
 // Imprime os valores dos sensores
 void imprimir_valores(float *vs) {
     printf("== SENSORES\n");
-    printf("Ta: \t%.2f\n ", vs[0]);
-    printf("T: \t%.2f\n ", vs[1]);
-    printf("Ti: \t%.2f\n ", vs[2]);
-    printf("No: \t%.2f\n ", vs[3]);
-    printf("H: \t%.2f\n ", vs[4]);
+    //printf("Ta: \t%.2f\n ", vs[0]);
+    //printf("T: \t%.2f\n ", vs[1]);
+    //printf("Ti: \t%.2f\n ", vs[2]);
+    //printf("No: \t%.2f\n ", vs[3]);
+    //printf("H: \t%.2f\n ", vs[4]);
+    printf("Temperatura: %.2f\n Nivel: %.2f \n", vs[0],vs[4]);
+    //printf("Nivel: %.2f \n", vs[4]);
 }
 
 // co-rotina periódica para imprimir valores
@@ -299,6 +305,114 @@ void *imprimir_valores_periodico(void *arg) {
         }
     }
 }
+
+//================================================================
+/*                           THREAD TELA                        */
+
+void tela(float *vs){
+
+  initscr();
+  cbreak();
+
+  while(1){
+
+    pthread_mutex_lock(&lock);
+
+    mvprintw(0,0,"==SENSORES:");
+    mvprintw(1,0,"Temperatura: %.2f",vs[0]);
+    mvprintw(2,0,"Nível: %.2f",vs[4]);
+
+    refresh();
+
+    pthread_mutex_unlock(&lock);
+
+  }
+
+  getch();
+  endwin();
+
+}
+//void test_entrada(int socket_local,struct sockaddr_in endereco_destino){
+void test_entrada(){
+
+   initscr();
+   cbreak();
+
+   char msg_enviada[1000];
+   char msg_recebida[1000];
+   char valor1[10];
+   char valor2[10];
+   int nrec;
+
+   keypad(stdscr,true);
+
+   //pthread_mutex_lock(&lock);
+
+   mvprintw(3,0,"-----------------");
+
+   mvprintw(4,0,"Set_Temperatura:");
+
+   mvgetstr(4,16,valor1);
+
+   //strcpy("sta0",valor1);
+
+   //envia_mensagem(socket_local,endereco_destino,valor1);
+
+   refresh();
+
+   //pthread_mutex_unlock(&lock);
+
+   getch();
+   endwin();
+
+}
+
+void *periodico(void *args) {
+    // arg: float vs
+    struct timespec t;
+    t.tv_sec++;
+
+    args_sensores* parametros =  args;
+    float *vs = parametros->vs;
+    int socket = parametros->socket;
+    struct sockaddr_in endereco_destino = parametros->endereco_destino;
+
+    long int periodo = 100000000; //1s
+    clock_gettime(CLOCK_MONOTONIC, &t);
+
+    while (1) {
+      clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME,&t,NULL);
+      test_entrada();
+      //test_entrada(socket,endereco_destino);
+	t.tv_nsec += periodo;
+
+        while(t.tv_nsec >= NSEC_PER_SEC){
+	    t.tv_nsec -= NSEC_PER_SEC;
+            t.tv_sec++;
+	 }
+    }
+}
+
+void *tela_periodico(void *arg) {
+    // arg: float vs
+    float *vs = (float*) arg;
+    struct timespec t;
+    t.tv_sec++;
+    long int periodo = 500000000; //1s
+    clock_gettime(CLOCK_MONOTONIC, &t);
+
+    while (1) {
+        clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME,&t,NULL);
+	tela(vs);
+        t.tv_nsec += periodo;
+
+        while(t.tv_nsec >= NSEC_PER_SEC){
+            t.tv_nsec -= NSEC_PER_SEC;
+            t.tv_sec++;
+        }
+    }
+}
+//================================================================
 
 int main(int argc, char *argv[]) {
     if (argc < 3) {
@@ -324,6 +438,11 @@ int main(int argc, char *argv[]) {
     args.socket = socket_local;
     args.endereco_destino = endereco_destino;
 
+
+    if(pthread_mutex_init(&lock,NULL) !=0){
+      printf("\n mutex init falhou \n");
+    }
+
     ler_sensores(VS, socket_local, endereco_destino);
     pthread_t threads[NUM_THREADS];
     pthread_create(&threads[0], NULL, ler_sensores_periodico,     (void *) &args);
@@ -331,6 +450,11 @@ int main(int argc, char *argv[]) {
     pthread_create(&threads[2], NULL, temp_alarme_periodico,      (void *) VS);
     pthread_create(&threads[3], NULL, alarme_periodico,           (void *) VS);
     pthread_create(&threads[4], NULL, armazenar_temp_nv_periodico,(void* ) VS);
+
+    //pthread_create(&threads[1], NULL, imprimir_valores_periodico, (void *) VS);
+    pthread_create(&threads[5], NULL, tela_periodico, (void *) VS);
+
+
     pthread_exit(NULL);
 
     return 0;
