@@ -13,11 +13,14 @@
 #include <stdlib.h>
 #include <netdb.h>
 #include <pthread.h>
+#include <ncurses.h>
+#include <string.h>
 
 #define FALHA 1
-#define NUM_THREADS 4
+#define NUM_THREADS 5
 #define NSEC_PER_SEC 1000000000
 #define HISTORICO_ARQUIVO "historico.txt"
+
 
 // ------------------------------------------
 
@@ -140,9 +143,11 @@ void ler_sensores(float *vs, int socket, struct sockaddr_in endereco_destino){
 //=======================================================================
 /*                          THREAD ALARME                              */
 
-void alarme(int bool){
+void alarme(int state){
 
-    if(bool == 1) printf("\nBIP!!!\n");
+    if(state == 1) {
+        printf("\nBIP!!!\n");
+    }
 
 }
 
@@ -277,6 +282,7 @@ void imprimir_valores(float *vs) {
     printf("Ti: \t%.2f\n ", vs[2]);
     printf("No: \t%.2f\n ", vs[3]);
     printf("H: \t%.2f\n ", vs[4]);
+
 }
 
 // co-rotina periódica para imprimir valores
@@ -300,6 +306,56 @@ void *imprimir_valores_periodico(void *arg) {
     }
 }
 
+//================================================================
+/*                           THREAD TELA                        */
+
+void tela_temp(float *vs){
+
+    initscr();
+    cbreak();
+
+    int y_max, x_max;
+    getmaxyx(stdscr,y_max, x_max);
+
+    while(1){
+
+
+        mvprintw(0,y_max-12,"+======================+");
+        mvprintw(1,y_max-12,"|      SENSORES        |");
+        mvprintw(2,y_max-12,"|======================|");
+
+        mvprintw(3,y_max-12,"| Nivel: %05.2f (m)     |",vs[4]);
+        mvprintw(4,y_max-12,"| Temp.: %05.2f (C)     |",vs[1]);
+
+        mvprintw(5,y_max-12,"+======================+");
+
+        refresh();
+
+
+    }
+}
+
+void *tela_periodico(void *arg) {
+    // arg: float vs
+    float *vs = (float*) arg;
+    struct timespec t;
+    t.tv_sec = 1;
+    long int periodo = 500000000; //1s
+    clock_gettime(CLOCK_MONOTONIC, &t);
+
+    while (1) {
+        clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME,&t,NULL);
+        tela_temp(vs);
+        t.tv_nsec += periodo;
+
+        while(t.tv_nsec >= NSEC_PER_SEC){
+            t.tv_nsec -= NSEC_PER_SEC;
+            t.tv_sec++;
+        }
+    }
+}
+//================================================================
+
 int main(int argc, char *argv[]) {
     if (argc < 3) {
         fprintf(stderr, "Uso: controlemanual <endereco> <porta>\n");
@@ -316,7 +372,7 @@ int main(int argc, char *argv[]) {
     struct sockaddr_in endereco_destino = cria_endereco_destino(
         argv[1],
         porta_destino
-    );
+        );
 
     // empacotamento de argumentos para a thread ler_sensores_periodico
     args_sensores args;
@@ -324,13 +380,18 @@ int main(int argc, char *argv[]) {
     args.socket = socket_local;
     args.endereco_destino = endereco_destino;
 
+
     ler_sensores(VS, socket_local, endereco_destino);
     pthread_t threads[NUM_THREADS];
     pthread_create(&threads[0], NULL, ler_sensores_periodico,     (void *) &args);
-    pthread_create(&threads[1], NULL, imprimir_valores_periodico, (void *) VS);
-    pthread_create(&threads[2], NULL, temp_alarme_periodico,      (void *) VS);
-    pthread_create(&threads[3], NULL, alarme_periodico,           (void *) VS);
-    pthread_create(&threads[4], NULL, armazenar_temp_nv_periodico,(void* ) VS);
+    pthread_create(&threads[1], NULL, temp_alarme_periodico,      (void *) VS);
+    pthread_create(&threads[2], NULL, alarme_periodico,           (void *) VS);
+    pthread_create(&threads[3], NULL, armazenar_temp_nv_periodico,(void* ) VS);
+
+    //pthread_create(&threads[1], NULL, imprimir_valores_periodico, (void *) VS);
+    pthread_create(&threads[4], NULL, tela_periodico, (void *) VS);
+
+
     pthread_exit(NULL);
 
     return 0;
