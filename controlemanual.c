@@ -17,7 +17,7 @@
 #include <string.h>
 
 #define FALHA 1
-#define NUM_THREADS 6
+#define NUM_THREADS 8
 #define NSEC_PER_SEC 1000000000
 #define HISTORICO_ARQUIVO "historico.txt"
 
@@ -359,6 +359,7 @@ void *tela_periodico(void *arg) {
     }
 }
 //================================================================
+
 //================================================================
 /*             thread para controlar o nivel                    */
 void envia_servidor_baixo_nivel(void *args){
@@ -461,6 +462,113 @@ void *enviar_servidor_nivel_cima_periodico(void *args) {
 }
 
 //================================================================
+
+//================================================================
+/*             thread para controlar a temperatura              */
+void envia_servidor_baixo_temperatura(void *args){
+
+  char msg_enviada_ni[1000];
+  char msg_enviada_na[1000];
+
+  
+  args_sensores* parametros =  args;
+  float *vs = (float*) parametros->vs;
+  float *va = (float*) parametros->va;
+  int socket = parametros->socket;
+  struct sockaddr_in endereco_destino = parametros->endereco_destino;
+
+  printf("-d-\n");
+        
+  if(vs[1] > (float)20.00){
+
+      va[0] -= 0.1;//ni
+      va[2] += 0.1;//na
+    
+      
+      sprintf(msg_enviada_ni,"ani%lf",va[0]);   
+      envia_mensagem(socket, endereco_destino, msg_enviada_ni);
+
+      sprintf(msg_enviada_na,"ana%lf",va[2]);   
+      envia_mensagem(socket, endereco_destino, msg_enviada_na);
+
+  }
+ 
+}
+
+void *enviar_servidor_temperatura_baixo_periodico(void *args) {
+    // arg: float vs
+    struct timespec t;
+    t.tv_sec = 1;
+    long int periodo =  500000000; //1s
+    clock_gettime(CLOCK_MONOTONIC, &t);
+
+    while (1) {
+        clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME,&t,NULL);
+        envia_servidor_baixo_temperatura(args);
+        t.tv_nsec += periodo;
+
+        while(t.tv_nsec >= NSEC_PER_SEC){
+            t.tv_nsec -= NSEC_PER_SEC;
+            t.tv_sec++;
+        }
+    }
+}
+
+
+//----------------------------------------------------------------------
+void envia_servidor_cima_temperatura(void *args){
+
+  char msg_enviada_ni[1000];
+  char msg_enviada_na[1000];
+
+
+  args_sensores* parametros =  args;
+  float *vs = (float*) parametros->vs;
+  float *va = (float*) parametros->va;
+  int socket = parametros->socket;
+  struct sockaddr_in endereco_destino = parametros->endereco_destino;
+  
+  printf("-e-\n");
+        
+  if(vs[4] < (float)20.00){
+    
+      va[0] += 0.1;//ni 
+      va[2] -= 0.1;//na
+      
+      sprintf(msg_enviada_ni,"ani%lf",va[0]);   
+      envia_mensagem(socket, endereco_destino, msg_enviada_ni);
+  
+      sprintf(msg_enviada_na,"ana%lf",va[2]);   
+      envia_mensagem(socket, endereco_destino, msg_enviada_na);
+      
+  }
+  
+}
+
+void *enviar_servidor_temperatura_cima_periodico(void *args) {
+    // arg: float vs
+    struct timespec t;
+    t.tv_sec = 1;
+    long int periodo =  500000000; //1s
+    clock_gettime(CLOCK_MONOTONIC, &t);
+
+    while (1) {
+        clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME,&t,NULL);
+        envia_servidor_cima_temperatura(args);
+        t.tv_nsec += periodo;
+
+        while(t.tv_nsec >= NSEC_PER_SEC){
+            t.tv_nsec -= NSEC_PER_SEC;
+            t.tv_sec++;
+        }
+    }
+}
+
+//================================================================
+
+
+
+
 int main(int argc, char *argv[]) {
     if (argc < 3) {
         fprintf(stderr, "Uso: controlemanual <endereco> <porta>\n");
@@ -497,6 +605,10 @@ int main(int argc, char *argv[]) {
     //pthread_create(&threads[4], NULL, tela_periodico, (void *) VS);
     pthread_create(&threads[4], NULL, enviar_servidor_nivel_baixo_periodico, (void *) &args);
     pthread_create(&threads[5], NULL, enviar_servidor_nivel_cima_periodico, (void *) &args);
+
+    pthread_create(&threads[6], NULL, enviar_servidor_temperatura_baixo_periodico, (void *) &args);
+    pthread_create(&threads[7], NULL, enviar_servidor_temperatura_cima_periodico, (void *) &args);
+
     pthread_exit(NULL);
 
     return 0;
