@@ -27,10 +27,12 @@ pthread_mutex_t lock;
 
 // Vetor de sensores
 float VS[5];
+float VA[4];
 
 // Estrutura de argumentos para passar para ler_sensores_periodico
 typedef struct {
     float *vs;
+    float *va;
     int socket;
     struct sockaddr_in endereco_destino;
 } args_sensores;
@@ -358,43 +360,105 @@ void *tela_periodico(void *arg) {
 }
 //================================================================
 //================================================================
-/*             TENTAR ENVIAR MENSAGEM PARA O SERVIDOR           */
-void *envia_servidor(void *args){
+/*             thread para controlar o nivel                    */
+void envia_servidor_baixo_nivel(void *args){
 
-  char opcao;
-  printf("digite\n");
+  char msg_enviada_ni[1000];
+  char msg_enviada_nf[1000];
 
+  
   args_sensores* parametros =  args;
-  //float *vs = parametros->vs;
+  float *vs = (float*) parametros->vs;
+  float *va = (float*) parametros->va;
   int socket = parametros->socket;
   struct sockaddr_in endereco_destino = parametros->endereco_destino;
 
-  int nrec;
-     
-  do{
-    //char teclado[1000];
-      char msg_enviada[1000];
-      char msg_recebida[1000];
-      double valor;
+  printf("a\n");
+        
+  if(vs[4] > (float)3.00){
+
+      va[0] -= 0.5;//ni
+      va[1] += 0.1;//nf
+    
       
-      scanf("%lf",&valor);
-      sprintf(msg_enviada,"ani%lf",valor);
-     
+      sprintf(msg_enviada_ni,"ani%lf",va[0]);   
+      envia_mensagem(socket, endereco_destino, msg_enviada_ni);
 
-      printf("Enviado: %s\n", msg_enviada);
-      envia_mensagem(socket, endereco_destino, msg_enviada);
+      sprintf(msg_enviada_nf,"anf%lf",va[1]);   
+      envia_mensagem(socket, endereco_destino, msg_enviada_nf);
 
-      nrec = recebe_mensagem(socket, msg_recebida, 1000);
-      msg_recebida[nrec] = '\0';
-      printf("Mensagem de resposta com %d bytes >>>%s<<<\n", nrec, msg_recebida);
-
-  }while(nrec != 0);
+  }
  
-  printf("sair");
+}
+
+void *enviar_servidor_nivel_baixo_periodico(void *args) {
+    // arg: float vs
+    struct timespec t;
+    t.tv_sec = 1;
+    long int periodo =  700000000; //1s
+    clock_gettime(CLOCK_MONOTONIC, &t);
+
+    while (1) {
+        clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME,&t,NULL);
+        envia_servidor_baixo_nivel(args);
+        t.tv_nsec += periodo;
+
+        while(t.tv_nsec >= NSEC_PER_SEC){
+            t.tv_nsec -= NSEC_PER_SEC;
+            t.tv_sec++;
+        }
+    }
 }
 
 
+//----------------------------------------------------------------------
+void envia_servidor_cima_nivel(void *args){
 
+  char msg_enviada_ni[1000];
+  char msg_enviada_nf[1000];
+
+
+  args_sensores* parametros =  args;
+  float *vs = (float*) parametros->vs;
+  float *va = (float*) parametros->va;
+  int socket = parametros->socket;
+  struct sockaddr_in endereco_destino = parametros->endereco_destino;
+  
+  printf("b\n");
+        
+  if(vs[4] < (float)3.00){
+    
+      va[0] += 0.1;//ni 
+      va[1] -= 0.5;//nf
+      
+      sprintf(msg_enviada_ni,"ani%lf",va[0]);   
+      envia_mensagem(socket, endereco_destino, msg_enviada_ni);
+  
+      sprintf(msg_enviada_nf,"anf%lf",va[1]);   
+      envia_mensagem(socket, endereco_destino, msg_enviada_nf);
+      
+  }
+  
+}
+
+void *enviar_servidor_nivel_cima_periodico(void *args) {
+    // arg: float vs
+    struct timespec t;
+    t.tv_sec = 1;
+    long int periodo =  700000000; //1s
+    clock_gettime(CLOCK_MONOTONIC, &t);
+
+    while (1) {
+        clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME,&t,NULL);
+        envia_servidor_cima_nivel(args);
+        t.tv_nsec += periodo;
+
+        while(t.tv_nsec >= NSEC_PER_SEC){
+            t.tv_nsec -= NSEC_PER_SEC;
+            t.tv_sec++;
+        }
+    }
+}
 
 //================================================================
 int main(int argc, char *argv[]) {
@@ -418,9 +482,9 @@ int main(int argc, char *argv[]) {
     // empacotamento de argumentos para a thread ler_sensores_periodico
     args_sensores args;
     args.vs = VS;
+    args.va = VA;
     args.socket = socket_local;
     args.endereco_destino = endereco_destino;
-
 
     ler_sensores(VS, socket_local, endereco_destino);
     pthread_t threads[NUM_THREADS];
@@ -429,11 +493,10 @@ int main(int argc, char *argv[]) {
     pthread_create(&threads[2], NULL, alarme_periodico,           (void *) VS);
     pthread_create(&threads[3], NULL, armazenar_temp_nv_periodico,(void* ) VS);
 
-    //pthread_create(&threads[1], NULL, imprimir_valores_periodico, (void *) VS);
+    //pthread_create(&threads[4], NULL, imprimir_valores_periodico, (void *) VS);
     //pthread_create(&threads[4], NULL, tela_periodico, (void *) VS);
-    pthread_create(&threads[4], NULL, envia_servidor, (void *) &args);
-    
-
+    pthread_create(&threads[4], NULL, enviar_servidor_nivel_baixo_periodico, (void *) &args);
+    pthread_create(&threads[5], NULL, enviar_servidor_nivel_cima_periodico, (void *) &args);
     pthread_exit(NULL);
 
     return 0;
