@@ -17,7 +17,7 @@
 #include <string.h>
 
 #define FALHA 1
-#define NUM_THREADS 8
+#define NUM_THREADS 5
 #define NSEC_PER_SEC 1000000000
 #define HISTORICO_ARQUIVO "historico.txt"
 
@@ -122,19 +122,23 @@ float ler_sensor(int socket, struct sockaddr_in endereco_destino, char* requisic
     char msg_recebida[1000];
     int nrec;
 
+    pthread_mutex_lock(&lock);
     envia_mensagem(socket,endereco_destino, requisicao);
     nrec = recebe_mensagem(socket,msg_recebida,1000);
+    pthread_mutex_unlock(&lock);
+    
     msg_recebida[nrec] = '\0';
     return extrair_num(msg_recebida,3);
+
 }
 
 // Lê todos os 5 sensores disponíveis no sistema.
 void ler_sensores(float *vs, int socket, struct sockaddr_in endereco_destino){
     float ta = ler_sensor(socket, endereco_destino, "sta0");
-    float t = ler_sensor(socket, endereco_destino, "st-0");
+    float t  = ler_sensor(socket, endereco_destino, "st-0");
     float ti = ler_sensor(socket, endereco_destino, "sti0");
     float no = ler_sensor(socket, endereco_destino, "sto0");
-    float h = ler_sensor(socket, endereco_destino, "sh-0");
+    float h  = ler_sensor(socket, endereco_destino, "sh-0");
 
     vs[0] = ta;
     vs[1] = t;
@@ -261,7 +265,7 @@ void *ler_sensores_periodico(void *args) {
 
     // float *vs, int socket, struct sockaddr_in endereco_destino
     t.tv_sec = 1;
-    long int periodo = 500000000; //0.5s
+    long int periodo =  500000000; //0.5s
     clock_gettime(CLOCK_MONOTONIC, &t);
 
     while (1) {
@@ -361,7 +365,7 @@ void *tela_periodico(void *arg) {
 //================================================================
 
 //================================================================
-/*             thread para controlar o nivel                    */
+/*             thread para controlar o nivel                    
 void envia_servidor_baixo_nivel(void *args){
 
   char msg_enviada_ni[1000];
@@ -375,9 +379,12 @@ void envia_servidor_baixo_nivel(void *args){
   struct sockaddr_in endereco_destino = parametros->endereco_destino;
 
   printf("a\n");
-        
+
+ 
   if(vs[4] > (float)3.00){
 
+      pthread_mutex_lock(&lock);
+    
       va[0] -= 0.5;//ni
       va[1] += 0.1;//nf
     
@@ -388,6 +395,7 @@ void envia_servidor_baixo_nivel(void *args){
       sprintf(msg_enviada_nf,"anf%lf",va[1]);   
       envia_mensagem(socket, endereco_destino, msg_enviada_nf);
 
+      pthread_mutex_unlock(&lock);
   }
  
 }
@@ -428,7 +436,8 @@ void envia_servidor_cima_nivel(void *args){
   printf("b\n");
         
   if(vs[4] < (float)3.00){
-    
+
+    pthread_mutex_lock(&lock);
       va[0] += 0.1;//ni 
       va[1] -= 0.5;//nf
       
@@ -437,7 +446,8 @@ void envia_servidor_cima_nivel(void *args){
   
       sprintf(msg_enviada_nf,"anf%lf",va[1]);   
       envia_mensagem(socket, endereco_destino, msg_enviada_nf);
-      
+
+      pthread_mutex_unlock(&lock);
   }
   
 }
@@ -460,43 +470,67 @@ void *enviar_servidor_nivel_cima_periodico(void *args) {
         }
     }
 }
-
+*/
 //================================================================
 
 //================================================================
 /*             thread para controlar a temperatura              */
-void envia_servidor_baixo_temperatura(void *args){
 
+void envia_servidor_temperatura(void *args){
+
+  //vetor de mensagens para enviar
   char msg_enviada_ni[1000];
   char msg_enviada_na[1000];
 
-  
+  //pegar os valores do vetor
   args_sensores* parametros =  args;
-  float *vs = (float*) parametros->vs;
   float *va = (float*) parametros->va;
   int socket = parametros->socket;
   struct sockaddr_in endereco_destino = parametros->endereco_destino;
 
-  printf("-d-\n");
-        
-  if(vs[1] > (float)20.00){
+  if(ler_sensor(socket, endereco_destino, "sti0") > 20.00){//Se o valor de temperatura passar de 20ºC
 
-      va[0] -= 0.1;//ni
+           if(va[2] < 0) va[2] = 0;
+      else if(va[0] >10) va[0] -=0.1;
+     
+      printf("pra aumentar ni e diminuir na - %f\n",ler_sensor(socket, endereco_destino, "st-0"));
+
+      printf("va[0] %f\n",va[0]);
+      printf("va[2] %f\n",va[2]);
+     
+      va[0] += 0.1;//enviar o valor de ni
+      va[2] -= 0.1;//enviar o valor de na
+      
+      sprintf(msg_enviada_ni,"ani%lf",va[0]);   
+      envia_mensagem(socket, endereco_destino, msg_enviada_ni);
+
+      sprintf(msg_enviada_na,"ana%lf",va[2]);   
+      envia_mensagem(socket, endereco_destino, msg_enviada_na);
+
+   }else{
+
+           if(va[0] < 0) va[0] = 0;
+      else if(va[2] < 0) va[2] -= 0.1;
+     
+      printf("pra aumentar na e diminuir ni - %f\n",ler_sensor(socket, endereco_destino, "st-0"));
+      printf("va[0] %f\n",va[0]);
+      printf("va[2] %f\n",va[2]);
+     
+      
+      va[0] -= 0.1;//ni 
       va[2] += 0.1;//na
-    
       
       sprintf(msg_enviada_ni,"ani%lf",va[0]);   
       envia_mensagem(socket, endereco_destino, msg_enviada_ni);
-
+  
       sprintf(msg_enviada_na,"ana%lf",va[2]);   
       envia_mensagem(socket, endereco_destino, msg_enviada_na);
 
   }
- 
 }
 
-void *enviar_servidor_temperatura_baixo_periodico(void *args) {
-    // arg: float vs
+void *enviar_servidor_temperatura_periodico(void *args) {
+    //arg: float vs
     struct timespec t;
     t.tv_sec = 1;
     long int periodo =  500000000; //1s
@@ -504,70 +538,18 @@ void *enviar_servidor_temperatura_baixo_periodico(void *args) {
 
     while (1) {
         clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME,&t,NULL);
-        envia_servidor_baixo_temperatura(args);
-        t.tv_nsec += periodo;
+        envia_servidor_temperatura(args);
+	t.tv_nsec += periodo;
 
-        while(t.tv_nsec >= NSEC_PER_SEC){
+	while(t.tv_nsec >= NSEC_PER_SEC){
             t.tv_nsec -= NSEC_PER_SEC;
             t.tv_sec++;
         }
     }
 }
 
-
-//----------------------------------------------------------------------
-void envia_servidor_cima_temperatura(void *args){
-
-  char msg_enviada_ni[1000];
-  char msg_enviada_na[1000];
-
-
-  args_sensores* parametros =  args;
-  float *vs = (float*) parametros->vs;
-  float *va = (float*) parametros->va;
-  int socket = parametros->socket;
-  struct sockaddr_in endereco_destino = parametros->endereco_destino;
-  
-  printf("-e-\n");
-        
-  if(vs[4] < (float)20.00){
-    
-      va[0] += 0.1;//ni 
-      va[2] -= 0.1;//na
-      
-      sprintf(msg_enviada_ni,"ani%lf",va[0]);   
-      envia_mensagem(socket, endereco_destino, msg_enviada_ni);
-  
-      sprintf(msg_enviada_na,"ana%lf",va[2]);   
-      envia_mensagem(socket, endereco_destino, msg_enviada_na);
-      
-  }
-  
-}
-
-void *enviar_servidor_temperatura_cima_periodico(void *args) {
-    // arg: float vs
-    struct timespec t;
-    t.tv_sec = 1;
-    long int periodo =  500000000; //1s
-    clock_gettime(CLOCK_MONOTONIC, &t);
-
-    while (1) {
-        clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME,&t,NULL);
-        envia_servidor_cima_temperatura(args);
-        t.tv_nsec += periodo;
-
-        while(t.tv_nsec >= NSEC_PER_SEC){
-            t.tv_nsec -= NSEC_PER_SEC;
-            t.tv_sec++;
-        }
-    }
-}
 
 //================================================================
-
-
-
 
 int main(int argc, char *argv[]) {
     if (argc < 3) {
@@ -596,19 +578,21 @@ int main(int argc, char *argv[]) {
 
     ler_sensores(VS, socket_local, endereco_destino);
     pthread_t threads[NUM_THREADS];
+
     pthread_create(&threads[0], NULL, ler_sensores_periodico,     (void *) &args);
     pthread_create(&threads[1], NULL, temp_alarme_periodico,      (void *) VS);
     pthread_create(&threads[2], NULL, alarme_periodico,           (void *) VS);
+    
     pthread_create(&threads[3], NULL, armazenar_temp_nv_periodico,(void* ) VS);
-
     //pthread_create(&threads[4], NULL, imprimir_valores_periodico, (void *) VS);
     //pthread_create(&threads[4], NULL, tela_periodico, (void *) VS);
-    pthread_create(&threads[4], NULL, enviar_servidor_nivel_baixo_periodico, (void *) &args);
-    pthread_create(&threads[5], NULL, enviar_servidor_nivel_cima_periodico, (void *) &args);
 
-    pthread_create(&threads[6], NULL, enviar_servidor_temperatura_baixo_periodico, (void *) &args);
-    pthread_create(&threads[7], NULL, enviar_servidor_temperatura_cima_periodico, (void *) &args);
-
+    //Laço de controle para nivel
+    //pthread_create(&threads[4], NULL, enviar_servidor_nivel_baixo_periodico, (void *) &args);
+    //pthread_create(&threads[5], NULL, enviar_servidor_nivel_cima_periodico, (void *) &args);
+    //Laço de controle para temperatura
+    pthread_create(&threads[4], NULL, enviar_servidor_temperatura_periodico, (void *) &args);
+    
     pthread_exit(NULL);
 
     return 0;
