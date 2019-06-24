@@ -17,22 +17,25 @@
 #include <string.h>
 
 #define FALHA 1
-#define NUM_THREADS 5
+#define NUM_THREADS 7
 #define NSEC_PER_SEC 1000000000
 #define HISTORICO_ARQUIVO "historico.txt"
 
+static pthread_mutex_t lock;
 
 // ------------------------------------------
 
 // Vetor de sensores
-float VS[5];
+float VS[5] = {0, 0, 0, 0, 0};
+float VA[4] = {0, 0, 0, 0};
 
 // Estrutura de argumentos para passar para ler_sensores_periodico
 typedef struct {
     float *vs;
+    float *va;
     int socket;
     struct sockaddr_in endereco_destino;
-} args_sensores;
+} args_controle;
 
 // ------------------------------------------
 
@@ -119,19 +122,38 @@ float ler_sensor(int socket, struct sockaddr_in endereco_destino, char* requisic
     char msg_recebida[1000];
     int nrec;
 
+    pthread_mutex_lock(&lock);
     envia_mensagem(socket,endereco_destino, requisicao);
     nrec = recebe_mensagem(socket,msg_recebida,1000);
+    pthread_mutex_unlock(&lock);
+
     msg_recebida[nrec] = '\0';
     return extrair_num(msg_recebida,3);
+
 }
+
+void modificar_atuador(int socket, struct sockaddr_in endereco_destino,
+                       const char* atuador, double valor) {
+    char msg_recebida[1000];
+    char msg_enviar[100];
+    int nrec;
+    sprintf(msg_enviar,"%s%lf",atuador, valor);
+    pthread_mutex_lock(&lock);
+    envia_mensagem(socket,endereco_destino, msg_enviar);
+    nrec = recebe_mensagem(socket,msg_recebida,1000);
+    pthread_mutex_unlock(&lock);
+
+    msg_recebida[nrec] = '\0';
+}
+
 
 // Lê todos os 5 sensores disponíveis no sistema.
 void ler_sensores(float *vs, int socket, struct sockaddr_in endereco_destino){
     float ta = ler_sensor(socket, endereco_destino, "sta0");
-    float t = ler_sensor(socket, endereco_destino, "st-0");
+    float t  = ler_sensor(socket, endereco_destino, "st-0");
     float ti = ler_sensor(socket, endereco_destino, "sti0");
-    float no = ler_sensor(socket, endereco_destino, "sto0");
-    float h = ler_sensor(socket, endereco_destino, "sh-0");
+    float no = ler_sensor(socket, endereco_destino, "sno0");
+    float h  = ler_sensor(socket, endereco_destino, "sh-0");
 
     vs[0] = ta;
     vs[1] = t;
@@ -251,14 +273,14 @@ void *armazenar_temp_nv_periodico(void *args){
 void *ler_sensores_periodico(void *args) {
 
     struct timespec t;
-    args_sensores* parametros =  args;
+    args_controle* parametros =  args;
     float *vs = parametros->vs;
     int socket = parametros->socket;
     struct sockaddr_in endereco_destino = parametros->endereco_destino;
 
     // float *vs, int socket, struct sockaddr_in endereco_destino
     t.tv_sec = 1;
-    long int periodo = 500000000; //0.5s
+    long int periodo =  500000000; //500000000;
     clock_gettime(CLOCK_MONOTONIC, &t);
 
     while (1) {
@@ -275,28 +297,34 @@ void *ler_sensores_periodico(void *args) {
 }
 
 // Imprime os valores dos sensores
-void imprimir_valores(float *vs) {
+void imprimir_valores(float *vs, float *va) {
     printf("== SENSORES\n");
-    printf("Ta: \t%.2f\n ", vs[0]);
-    printf("T: \t%.2f\n ", vs[1]);
-    printf("Ti: \t%.2f\n ", vs[2]);
-    printf("No: \t%.2f\n ", vs[3]);
-    printf("H: \t%.2f\n ", vs[4]);
+    printf("Ta: \t%.2f\n", vs[0]);
+    printf("T: \t%.2f\n", vs[1]);
+    printf("Ti: \t%.2f\n", vs[2]);
+    printf("No: \t%.2f\n", vs[3]);
+    printf("H: \t%.2f\n", vs[4]);
+    printf("== ATUADORES\n");
+    printf("Ni: \t%.2f\n", va[0]);
+    printf("Q: \t%.2f\n", va[1]);
+    printf("Na: \t%.2f\n", va[2]);
+    printf("Nf: \t%.2f\n", va[3]);
 
 }
 
 // co-rotina periódica para imprimir valores
-void *imprimir_valores_periodico(void *arg) {
+void *imprimir_valores_periodico(void *args) {
     // arg: float vs
-    float *vs = (float*) arg;
+    args_controle *parametros = args;
+
     struct timespec t;
     t.tv_sec = 1;
-    long int periodo = 1000000000; //1s
+    long int periodo =  1000000000;
     clock_gettime(CLOCK_MONOTONIC, &t);
 
     while (1) {
         clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME,&t,NULL);
-        imprimir_valores(vs);
+        imprimir_valores(parametros->vs, parametros->va);
         t.tv_nsec += periodo;
 
         while(t.tv_nsec >= NSEC_PER_SEC){
@@ -314,25 +342,23 @@ void tela_temp(float *vs){
     initscr();
     cbreak();
 
-    int y_max, x_max;
-    getmaxyx(stdscr,y_max, x_max);
-
     while(1){
 
 
-        mvprintw(0,y_max-12,"+======================+");
-        mvprintw(1,y_max-12,"|      SENSORES        |");
-        mvprintw(2,y_max-12,"|======================|");
-
-        mvprintw(3,y_max-12,"| Nivel: %05.2f (m)     |",vs[4]);
-        mvprintw(4,y_max-12,"| Temp.: %05.2f (C)     |",vs[1]);
-
-        mvprintw(5,y_max-12,"+======================+");
+        mvprintw(0,12,"+======================+");
+        mvprintw(1,12,"|      SENSORES        |");
+        mvprintw(2,12,"|======================|");
+        mvprintw(3,12,"| Nivel: %05.2f (m)     |",vs[4]);
+        mvprintw(4,12,"| Temp.: %05.2f (C)     |",vs[1]);
+        mvprintw(5,12,"+======================+");
 
         refresh();
 
 
     }
+
+    getch();
+    endwin();
 }
 
 void *tela_periodico(void *arg) {
@@ -356,6 +382,66 @@ void *tela_periodico(void *arg) {
 }
 //================================================================
 
+//================================================================
+/*             thread para controlar a temperatura              */
+
+void controle_temperatura(args_controle *parametros){
+    //pegar os valores do vetor
+    float *va = parametros->va;
+    float *vs = parametros->va;
+    int socket = parametros->socket;
+    struct sockaddr_in endereco_destino = parametros->endereco_destino;
+    const float TD = 21.0;
+    const float step = 0.5;
+
+
+    // modifica atuadores
+    if (VS[1] > TD){
+        va[0] += step; //ni
+        va[2] -= step; //na
+    } else {
+        va[0] -= step; //ni
+        va[2] += step; //na
+    }
+
+    // limite de modificação dos atuadores
+    if (va[0] < 0) {
+        va[0] = 0;
+    } else if (va[0] >= 10) {
+        va[0] = 9.9;
+    }
+
+    if (va[2] < 0 ) {
+        va[2] = 0;
+    } else if (va[2] >= 10) {
+        va[2] = 9.9;
+    }
+
+    modificar_atuador(socket, endereco_destino, "ani", va[0]);
+    modificar_atuador(socket, endereco_destino, "ana", va[2]);
+
+}
+
+void *controle_temperatura_periodico(void *args) {
+    //arg: float vs
+    struct timespec t;
+    t.tv_sec = 1;
+    long int periodo =  500000000; // 50ms
+    clock_gettime(CLOCK_MONOTONIC, &t);
+
+    while (1) {
+        clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME,&t,NULL);
+        controle_temperatura(args);
+        t.tv_nsec += periodo;
+
+        while(t.tv_nsec >= NSEC_PER_SEC){
+            t.tv_nsec -= NSEC_PER_SEC;
+            t.tv_sec++;
+        }
+    }
+}
+
+
 int main(int argc, char *argv[]) {
     if (argc < 3) {
         fprintf(stderr, "Uso: controlemanual <endereco> <porta>\n");
@@ -375,22 +461,21 @@ int main(int argc, char *argv[]) {
         );
 
     // empacotamento de argumentos para a thread ler_sensores_periodico
-    args_sensores args;
+    args_controle args;
     args.vs = VS;
+    args.va = VA;
     args.socket = socket_local;
     args.endereco_destino = endereco_destino;
 
-
-    ler_sensores(VS, socket_local, endereco_destino);
     pthread_t threads[NUM_THREADS];
+
     pthread_create(&threads[0], NULL, ler_sensores_periodico,     (void *) &args);
     pthread_create(&threads[1], NULL, temp_alarme_periodico,      (void *) VS);
     pthread_create(&threads[2], NULL, alarme_periodico,           (void *) VS);
-    pthread_create(&threads[3], NULL, armazenar_temp_nv_periodico,(void* ) VS);
-
-    //pthread_create(&threads[1], NULL, imprimir_valores_periodico, (void *) VS);
-    pthread_create(&threads[4], NULL, tela_periodico, (void *) VS);
-
+    pthread_create(&threads[3], NULL, armazenar_temp_nv_periodico,(void *) VS);
+    pthread_create(&threads[4], NULL, imprimir_valores_periodico, (void *) &args);
+    pthread_create(&threads[5], NULL, controle_temperatura_periodico, (void *) &args);
+    //pthread_create(&threads[6], NULL, tela_periodico, (void *) (void *) VS);
 
     pthread_exit(NULL);
 
