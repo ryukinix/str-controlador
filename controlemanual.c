@@ -389,7 +389,9 @@ void *tela_periodico(void *arg) {
 void controle_temperatura(args_controle *parametros){
     //pegar os valores do vetor
     float *va = parametros->va;
-    float *vs = parametros->va;
+    // HACK: NÃO DESCOMENTE ESSA LINHA OU TUDO IRÁ DESMORONAR!
+    // USE VS e não vs.
+    // float *vs = parametros->va;
     int socket = parametros->socket;
     struct sockaddr_in endereco_destino = parametros->endereco_destino;
     const float step = 0.5;
