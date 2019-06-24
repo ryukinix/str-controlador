@@ -17,10 +17,11 @@
 #include <string.h>
 
 #define FALHA 1
-#define NUM_THREADS 5
+#define NUM_THREADS 6
 #define NSEC_PER_SEC 1000000000
 #define HISTORICO_ARQUIVO "historico.txt"
 
+pthread_mutex_t lock;
 
 // ------------------------------------------
 
@@ -291,7 +292,7 @@ void *imprimir_valores_periodico(void *arg) {
     float *vs = (float*) arg;
     struct timespec t;
     t.tv_sec = 1;
-    long int periodo = 1000000000; //1s
+    long int periodo = 2000000000; //1s
     clock_gettime(CLOCK_MONOTONIC, &t);
 
     while (1) {
@@ -314,25 +315,26 @@ void tela_temp(float *vs){
     initscr();
     cbreak();
 
-    int y_max, x_max;
-    getmaxyx(stdscr,y_max, x_max);
-
     while(1){
 
+      pthread_mutex_lock(&lock);
 
-        mvprintw(0,y_max-12,"+======================+");
-        mvprintw(1,y_max-12,"|      SENSORES        |");
-        mvprintw(2,y_max-12,"|======================|");
+        mvprintw(0,12,"+======================+");
+        mvprintw(1,12,"|      SENSORES        |");
+        mvprintw(2,12,"|======================|");
 
-        mvprintw(3,y_max-12,"| Nivel: %05.2f (m)     |",vs[4]);
-        mvprintw(4,y_max-12,"| Temp.: %05.2f (C)     |",vs[1]);
+        mvprintw(3,12,"| Nivel: %05.2f (m)     |",vs[4]);
+        mvprintw(4,12,"| Temp.: %05.2f (C)     |",vs[1]);
 
-        mvprintw(5,y_max-12,"+======================+");
+        mvprintw(5,12,"+======================+");
 
         refresh();
 
 
     }
+
+    getch();
+    endwin();
 }
 
 void *tela_periodico(void *arg) {
@@ -355,7 +357,46 @@ void *tela_periodico(void *arg) {
     }
 }
 //================================================================
+//================================================================
+/*             TENTAR ENVIAR MENSAGEM PARA O SERVIDOR           */
+void *envia_servidor(void *args){
 
+  char opcao;
+  printf("digite\n");
+
+  args_sensores* parametros =  args;
+  //float *vs = parametros->vs;
+  int socket = parametros->socket;
+  struct sockaddr_in endereco_destino = parametros->endereco_destino;
+
+  int nrec;
+     
+  do{
+    //char teclado[1000];
+      char msg_enviada[1000];
+      char msg_recebida[1000];
+      double valor;
+      
+      scanf("%lf",&valor);
+      sprintf(msg_enviada,"ani%lf",valor);
+     
+
+      printf("Enviado: %s\n", msg_enviada);
+      envia_mensagem(socket, endereco_destino, msg_enviada);
+
+      nrec = recebe_mensagem(socket, msg_recebida, 1000);
+      msg_recebida[nrec] = '\0';
+      printf("Mensagem de resposta com %d bytes >>>%s<<<\n", nrec, msg_recebida);
+
+  }while(nrec != 0);
+ 
+  printf("sair");
+}
+
+
+
+
+//================================================================
 int main(int argc, char *argv[]) {
     if (argc < 3) {
         fprintf(stderr, "Uso: controlemanual <endereco> <porta>\n");
@@ -389,8 +430,9 @@ int main(int argc, char *argv[]) {
     pthread_create(&threads[3], NULL, armazenar_temp_nv_periodico,(void* ) VS);
 
     //pthread_create(&threads[1], NULL, imprimir_valores_periodico, (void *) VS);
-    pthread_create(&threads[4], NULL, tela_periodico, (void *) VS);
-
+    //pthread_create(&threads[4], NULL, tela_periodico, (void *) VS);
+    pthread_create(&threads[4], NULL, envia_servidor, (void *) &args);
+    
 
     pthread_exit(NULL);
 
