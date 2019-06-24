@@ -18,8 +18,15 @@
 
 #define FALHA 1
 #define NUM_THREADS 7
-#define NSEC_PER_SEC 1000000000
+#define NSEC_PER_SEC 1000000000 // 1s
 #define HISTORICO_ARQUIVO "historico.txt"
+#define PERIODO_TELA                 1000000000 // 1s
+#define PERIODO_ARMAZENAR            1000000000 // 500ms
+#define PERIODO_CONTROLE_TEMPERATURA 50000000   // 50ms
+#define PERIODO_CONTROEL_NIVEL       70000000   // 70ms
+#define PERIODO_ALARME               5000000    // 5ms
+#define TEMPERATURA_DESEJADA         25.0
+#define NIVEL_DESEJADO               2.0
 
 static pthread_mutex_t lock;
 
@@ -191,7 +198,7 @@ void *temp_alarme_periodico(void *args){
     float *vs = (float*) args;
     struct timespec t;
     t.tv_sec = 1;
-    long int periodo = 50000000;//0,05s
+    long int periodo = PERIODO_ALARME;
     clock_gettime(CLOCK_MONOTONIC,&t);
 
     while(1){
@@ -227,8 +234,6 @@ void *alarme_periodico(void *args){
     }
 }
 
-//=======================================================================
-
 
 //=======================================================================
 //                      THREAD ARMAZENAR
@@ -251,7 +256,7 @@ void *armazenar_temp_nv_periodico(void *args){
     float *vs = (float*) args;
     struct timespec t;
     t.tv_sec = 1;
-    long int periodo = 400000000;
+    long int periodo = PERIODO_ARMAZENAR;
     clock_gettime(CLOCK_MONOTONIC,&t);
 
     while(1){
@@ -319,7 +324,7 @@ void *imprimir_valores_periodico(void *args) {
 
     struct timespec t;
     t.tv_sec = 1;
-    long int periodo =  1000000000;
+    long int periodo =  PERIODO_TELA;
     clock_gettime(CLOCK_MONOTONIC, &t);
 
     while (1) {
@@ -343,8 +348,6 @@ void tela_temp(float *vs){
     cbreak();
 
     while(1){
-
-
         mvprintw(0,12,"+======================+");
         mvprintw(1,12,"|      SENSORES        |");
         mvprintw(2,12,"|======================|");
@@ -353,8 +356,6 @@ void tela_temp(float *vs){
         mvprintw(5,12,"+======================+");
 
         refresh();
-
-
     }
 
     getch();
@@ -391,12 +392,11 @@ void controle_temperatura(args_controle *parametros){
     float *vs = parametros->va;
     int socket = parametros->socket;
     struct sockaddr_in endereco_destino = parametros->endereco_destino;
-    const float TD = 55.0;
     const float step = 0.5;
 
 
     // modifica atuadores
-    if (VS[1] > TD){
+    if (VS[1] > TEMPERATURA_DESEJADA){
         va[0] += step; //ni
         va[2] -= step; //na
     } else {
