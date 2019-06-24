@@ -240,7 +240,7 @@ void armanezar_temp_nv(float *vs){
     if(arq_hist == NULL) {
         printf("Erro ao abrir o arquivo");
     }
-    fprintf(arq_hist,"T,%f\n",vs[0]);
+    fprintf(arq_hist,"T,%f\n",vs[1]);
     fprintf(arq_hist,"N,%f\n",vs[4]);
 
     fclose(arq_hist);
@@ -391,7 +391,7 @@ void controle_temperatura(args_controle *parametros){
     float *vs = parametros->va;
     int socket = parametros->socket;
     struct sockaddr_in endereco_destino = parametros->endereco_destino;
-    const float TD = 21.0;
+    const float TD = 55.0;
     const float step = 0.5;
 
 
