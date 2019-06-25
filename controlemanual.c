@@ -14,19 +14,19 @@
 #include <netdb.h>
 #include <pthread.h>
 #include <ncurses.h>
-#include <string.h>
+#include <string.h	>
 
 #define FALHA 1
-#define NUM_THREADS 7
-#define NSEC_PER_SEC 1000000000 // 1s
+#define NUM_THREADS 8
 #define HISTORICO_ARQUIVO "historico.txt"
+#define NSEC_PER_SEC                 1000000000 // 1s
 #define PERIODO_TELA                 1000000000 // 1s
 #define PERIODO_ARMAZENAR            1000000000 // 500ms
 #define PERIODO_CONTROLE_TEMPERATURA 50000000   // 50ms
 #define PERIODO_CONTROEL_NIVEL       70000000   // 70ms
 #define PERIODO_ALARME               5000000    // 5ms
-#define TEMPERATURA_DESEJADA         25.0
-#define NIVEL_DESEJADO               2.0
+#define TEMPERATURA_DESEJADA         50.0
+#define NIVEL_DESEJADO               3.0
 
 static pthread_mutex_t lock;
 
@@ -46,7 +46,7 @@ typedef struct {
 
 // ------------------------------------------
 
-
+//--------------------------------------------------------------------------------------
 int cria_socket_local(void) {
     int socket_local;       /* Socket usado na comunicacao */
 
@@ -61,7 +61,7 @@ int cria_socket_local(void) {
 struct sockaddr_in cria_endereco_destino(char *destino, int porta_destino) {
     struct sockaddr_in servidor;    /* Endereco do servidor incluindo ip e porta */
     struct hostent *dest_internet;  /* Endereco destino em formato proprio       */
-    struct in_addr dest_ip;     /* Endereco destino em formato ip numerico   */
+    struct in_addr dest_ip;         /* Endereco destino em formato ip numerico   */
 
     if (inet_aton ( destino, &dest_ip ))
         dest_internet = gethostbyaddr((char *)&dest_ip, sizeof(dest_ip), AF_INET);
@@ -105,6 +105,7 @@ int recebe_mensagem(int socket_local, char *buffer, int TAM_BUFFER) {
 
     return bytes_recebidos;
 }
+//--------------------------------------------------------------------------------------
 
 // sta30.0 -> 30.0
 float extrair_num (char *s,int k){
@@ -219,8 +220,8 @@ void *alarme_periodico(void *args){
     float *vs = (float*) args;
     struct timespec t;
     t.tv_sec = 1;
-    long int periodo = 4000000000;//0,5s
-    clock_gettime(CLOCK_MONOTONIC,&t);
+    long int periodo = 500000000;//0,5s
+ *   clock_gettime(CLOCK_MONOTONIC,&t);
 
     while(1){
         clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME,&t,NULL);
@@ -313,7 +314,7 @@ void imprimir_valores(float *vs, float *va) {
     printf("Ni: \t%.2f\n", va[0]);
     printf("Q: \t%.2f\n", va[1]);
     printf("Na: \t%.2f\n", va[2]);
-    printf("Nf: \t%.2f\n", va[3]);
+    printf("Nf: \t%.2f\n\n", va[3]);
 
 }
 
@@ -344,18 +345,26 @@ void *imprimir_valores_periodico(void *args) {
 
 void tela_temp(float *vs){
 
+
     initscr();
     cbreak();
 
     while(1){
-        mvprintw(0,12,"+======================+");
-        mvprintw(1,12,"|      SENSORES        |");
-        mvprintw(2,12,"|======================|");
-        mvprintw(3,12,"| Nivel: %05.2f (m)     |",vs[4]);
-        mvprintw(4,12,"| Temp.: %05.2f (C)     |",vs[1]);
-        mvprintw(5,12,"+======================+");
 
-        refresh();
+
+	mvprintw(0, 12,"+======================+");
+        mvprintw(1, 12,"|      SENSORES        |");
+        mvprintw(2, 12,"|======================|");
+	refresh();
+        mvprintw(3, 12,"| Nivel: %05.2f (m)     |",vs[4]);
+	refresh();
+        mvprintw(4, 12,"| Temp.: %05.2f (C)     |",vs[1]);
+	refresh();
+        mvprintw(5, 12,"+======================+");
+
+	refresh();
+
+
     }
 
     getch();
@@ -367,12 +376,13 @@ void *tela_periodico(void *arg) {
     float *vs = (float*) arg;
     struct timespec t;
     t.tv_sec = 1;
-    long int periodo = 500000000; //1s
+    long int periodo = 500000000; //0,5s
     clock_gettime(CLOCK_MONOTONIC, &t);
 
     while (1) {
         clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME,&t,NULL);
         tela_temp(vs);
+
         t.tv_nsec += periodo;
 
         while(t.tv_nsec >= NSEC_PER_SEC){
@@ -381,6 +391,7 @@ void *tela_periodico(void *arg) {
         }
     }
 }
+
 //================================================================
 
 //================================================================
@@ -409,7 +420,7 @@ void controle_temperatura(args_controle *parametros){
     // limite de modificação dos atuadores
     if (va[0] < 0) {
         va[0] = 0;
-    } else if (va[0] >= 10) {
+    } else if (va[0] >= 50) {
         va[0] = 9.9;
     }
 
@@ -442,7 +453,67 @@ void *controle_temperatura_periodico(void *args) {
         }
     }
 }
+//=======================================================================
+/*              thread para controlar o nivel                          */
 
+void controle_nivel(args_controle *parametros){
+    //pegar os valores do vetor
+    float *va = parametros->va;
+    // HACK: NÃO DESCOMENTE ESSA LINHA OU TUDO IRÁ DESMORONAR!
+    // USE VS e não vs.
+    // float *vs = parametros->va;
+    int socket = parametros->socket;
+    struct sockaddr_in endereco_destino = parametros->endereco_destino;
+    const float step = 0.5;
+
+
+    // modifica atuadores
+    if (VS[4] > NIVEL_DESEJADO){
+        va[3] += step; //nf
+        va[2] -= step; //na
+    } else {
+        va[3] -= step; //nf
+        va[2] += step; //na
+    }
+
+    // limite de modificação dos atuadores
+    if (va[3] < 0) {
+        va[3] = 0;
+    } else if (va[3] >= 50) {
+        va[3] = 9.9;
+    }
+
+    if (va[2] < 0 ) {
+        va[2] = 0;
+    } else if (va[2] >= 50) {
+        va[2] = 9.9;
+    }
+
+    modificar_atuador(socket, endereco_destino, "anf", va[3]);
+    modificar_atuador(socket, endereco_destino, "ana", va[2]);
+
+}
+
+void *controle_nivel_periodico(void *args) {
+    //arg: float vs
+    struct timespec t;
+    t.tv_sec = 1;
+    long int periodo =  700000000; // 70ms
+    clock_gettime(CLOCK_MONOTONIC, &t);
+
+    while (1) {
+        clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME,&t,NULL);
+        controle_nivel(args);
+        t.tv_nsec += periodo;
+
+        while(t.tv_nsec >= NSEC_PER_SEC){
+            t.tv_nsec -= NSEC_PER_SEC;
+            t.tv_sec++;
+        }
+    }
+}
+
+//=======================================================================
 
 int main(int argc, char *argv[]) {
     if (argc < 3) {
@@ -471,14 +542,16 @@ int main(int argc, char *argv[]) {
 
     pthread_t threads[NUM_THREADS];
 
-    pthread_create(&threads[0], NULL, ler_sensores_periodico,     (void *) &args);
-    pthread_create(&threads[1], NULL, temp_alarme_periodico,      (void *) VS);
-    pthread_create(&threads[2], NULL, alarme_periodico,           (void *) VS);
-    pthread_create(&threads[3], NULL, armazenar_temp_nv_periodico,(void *) VS);
-    pthread_create(&threads[4], NULL, imprimir_valores_periodico, (void *) &args);
+    pthread_create(&threads[0], NULL, ler_sensores_periodico,         (void *) &args);
+    pthread_create(&threads[1], NULL, temp_alarme_periodico,          (void *) VS);
+    pthread_create(&threads[2], NULL, alarme_periodico,               (void *) VS);
+    pthread_create(&threads[3], NULL, armazenar_temp_nv_periodico,    (void *) VS);
+    pthread_create(&threads[4], NULL, imprimir_valores_periodico,     (void *) &args);
     pthread_create(&threads[5], NULL, controle_temperatura_periodico, (void *) &args);
-    //pthread_create(&threads[6], NULL, tela_periodico, (void *) (void *) VS);
+    pthread_create(&threads[6], NULL, controle_nivel_periodico,       (void *) &args);
+    //pthread_create(&threads[7], NULL, tela_periodico, (void *) &args);
 
+    
     pthread_exit(NULL);
 
     return 0;
