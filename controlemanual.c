@@ -14,7 +14,7 @@
 #include <netdb.h>
 #include <pthread.h>
 #include <ncurses.h>
-#include <string.h	>
+#include <string.h>
 
 #define FALHA 1
 #define NUM_THREADS 8
@@ -221,7 +221,7 @@ void *alarme_periodico(void *args){
     struct timespec t;
     t.tv_sec = 1;
     long int periodo = 500000000;//0,5s
- *   clock_gettime(CLOCK_MONOTONIC,&t);
+    clock_gettime(CLOCK_MONOTONIC,&t);
 
     while(1){
         clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME,&t,NULL);
@@ -551,7 +551,7 @@ int main(int argc, char *argv[]) {
     pthread_create(&threads[6], NULL, controle_nivel_periodico,       (void *) &args);
     //pthread_create(&threads[7], NULL, tela_periodico, (void *) &args);
 
-    
+
     pthread_exit(NULL);
 
     return 0;
